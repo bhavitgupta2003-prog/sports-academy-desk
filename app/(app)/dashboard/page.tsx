@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { rupees, todayString } from "@/lib/fees";
+import { fetchAll } from "@/lib/fetchAll";
 import { useSessionGuard } from "@/lib/useSessionGuard";
 import { buildRows, type PaymentRow, type StudentRow } from "@/lib/studentList";
 import { summarizeDashboard, type DashboardSummary } from "@/lib/dashboard";
@@ -32,7 +33,7 @@ export default function DashboardPage() {
     const day = todayString();
     const [s, p, a] = await Promise.all([
       db.from("students").select("id,name,coach,monthly_fee,joined_on,batch_id,batches(name)"),
-      db.from("fee_payments").select("student_id,amount"),
+      fetchAll<PaymentRow>((from, to) => db.from("fee_payments").select("student_id,amount").order("id").range(from, to)),
       db.from("attendance").select("student_id,status").eq("date", day),
     ]);
     if (s.error || p.error || a.error) {

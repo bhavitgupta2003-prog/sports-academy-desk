@@ -52,13 +52,17 @@ Never give the secret key a `NEXT_PUBLIC_` prefix, and never use Supabase's `ser
 ## Checks
 
 ```bash
-node --test lib/*.test.ts   # automated tests (fee maths, dates, validation, session logic, security rules)
+npm test                    # automated tests (fee maths, dates, validation, session logic, security rules, demo-data generator)
 npx tsc --noEmit            # type check
 npm run lint                # code style
 npm run build               # production build
 ```
 
 The automated tests check the app's logic and read project files for mistakes (for example, a secret key name in browser code). **They do not test the live Supabase database or the screens in a browser.** Check those by hand (see below).
+
+## Demo data
+
+`scripts/seed-demo/` can fill your own account with realistic fictional data (7 batches, 100 students, two months of attendance, a varied payment history) and remove it again later. It signs in as you, so database privacy rules stay on. See `scripts/seed-demo/README.md`. Quick start: `npm run seed:demo` previews it without touching anything.
 
 ## Database safety
 
@@ -82,6 +86,7 @@ Every table has Row Level Security: a login can read and change only rows whose 
 - **Sign-up is open** to anyone with the link (each account is isolated). Turn off sign-ups in Supabase if this matters.
 - **AI cooldown is only a speed bump.** It is kept in one server's memory (15 seconds per user), so on Vercel it cannot stop a determined person. For a real limit, set a spending cap on the OpenRouter key.
 - **AI Summary needs data:** at least one student and some attendance in the last 30 days. Its suggestions can be wrong; the "Facts used" table shows the real numbers.
+- Supabase returns at most 1,000 rows per request, so the AI summary, dashboard and student list read payments and attendance page by page (`lib/fetchAll.ts`). Other screens read one batch or one student at a time and stay well under that.
 - No edit or delete for students, batches, attendance or payments yet. No password reset. No notifications of any kind (no WhatsApp, SMS or email), no online payments.
 - Fee status uses a fixed due day (the 5th) set by `DUE_DAY` in `lib/fees.ts`.
 - The logic is covered by automated tests, but the logged-in screens have only been partly checked in a browser. Click through them by hand after each deploy.

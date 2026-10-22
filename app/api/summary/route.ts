@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buildDigest, type Digest } from "@/lib/digest";
 import { addDays, todayString } from "@/lib/fees";
 import { createCooldown } from "@/lib/cooldown";
+import { fetchAll } from "@/lib/fetchAll";
 import { bodyTooLarge, isSameOrigin, MAX_BODY_BYTES } from "@/lib/apiGuard";
 
 const WINDOW_DAYS = 30;
@@ -77,11 +78,13 @@ export async function POST(request: Request) {
     const sinceStr = addDays(today, -(WINDOW_DAYS - 1));
     const [s, a, p] = await Promise.all([
       supabase.from("students").select("id,name,monthly_fee,joined_on,batches(name)").eq("owner_id", user.id),
-      supabase.from("attendance").select("student_id,status").eq("owner_id", user.id).gte("date", sinceStr),
-      supabase.from("fee_payments").select("student_id,amount").eq("owner_id", user.id),
+      // Read in pages: a plain query is silently cut at 1,000 rows, which a busy academy would exceed.
+      fetchAll<{ student_id: string; status: string }>((from, to) => supabase.from("attendance").select("student_id,status").eq("owner_id", user.id).gte("date", sinceStr).order("id").range(from, to)),
+      fetchAll<{ student_id: string; amount: number }>((from, to) => supabase.from("fee_payments").select("student_id,amount").eq("owner_id", user.id).order("id").range(from, to)),
     ]);
     if (s.error || a.error || p.error) {
-      console.error("[summary] database read failed", s.error?.code ?? a.error?.code ?? p.error?.code);
+      const failed = (s.error ?? a.error ?? p.error) as { code?: string } | null;
+      console.error("[summary] database read failed", failed?.code);
       return fail("Could not read your academy records. Please try again.");
     }
 

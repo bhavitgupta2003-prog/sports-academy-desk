@@ -13,6 +13,7 @@ import LoadingState from "@/components/ui/LoadingState";
 import Notice from "@/components/ui/Notice";
 import PageHeader from "@/components/ui/PageHeader";
 import { rupees, todayString } from "@/lib/fees";
+import { fetchAll } from "@/lib/fetchAll";
 import { useSessionGuard } from "@/lib/useSessionGuard";
 import { buildRows, filterRows, noFilters, type Filters, type ListRow, type PaymentRow, type StudentRow } from "@/lib/studentList";
 
@@ -29,7 +30,7 @@ export default function StudentsPage() {
     const db = createClient();
     const [s, p] = await Promise.all([
       db.from("students").select("id,name,coach,monthly_fee,joined_on,batch_id,batches(name)").order("name"),
-      db.from("fee_payments").select("student_id,amount"),
+      fetchAll<PaymentRow>((from, to) => db.from("fee_payments").select("student_id,amount").order("id").range(from, to)),
     ]);
     if (s.error || p.error) {
       if (await guard(s.error ?? p.error)) return;
