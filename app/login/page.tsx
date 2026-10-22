@@ -1,8 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { button, buttonLight, card, input, label } from "@/lib/ui";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/session";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,6 +11,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [expired, setExpired] = useState(false);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("reason") === "expired") setExpired(true);
+  }, []);
 
   async function submit(mode: "in" | "up") {
     setMessage("");
@@ -36,6 +42,11 @@ export default function LoginPage() {
     <main className="mx-auto mt-24 w-full max-w-sm px-4">
       <h1 className="mb-1 text-2xl font-semibold">Sports Academy Desk</h1>
       <p className="mb-6 text-sm text-slate-600">Sign in with your staff account, or create one.</p>
+      {expired && (
+        <p role="alert" className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          {SESSION_EXPIRED_MESSAGE}
+        </p>
+      )}
       <form
         className={card + " space-y-4"}
         onSubmit={(e) => {

@@ -6,6 +6,7 @@ export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   let loggedIn = false;
+  let authServerUnreachable = false;
   try {
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,14 +22,23 @@ export async function proxy(request: NextRequest) {
         },
       },
     );
-    const { data } = await supabase.auth.getUser();
+    const { data, error } = await supabase.auth.getUser();
     loggedIn = !!data.user;
-  } catch {
+    // A network problem is not an expired login: don't send people to /login for it.
+    authServerUnreachable = !loggedIn && error?.name === "AuthRetryableFetchError";
+  } catch (e) {
     loggedIn = false; // e.g. Supabase not configured yet
+    authServerUnreachable = e instanceof TypeError; // fetch failed
   }
 
   const onLogin = request.nextUrl.pathname === "/login";
-  if (!loggedIn && !onLogin) return NextResponse.redirect(new URL("/login", request.url));
+  if (!loggedIn && !onLogin && !authServerUnreachable) {
+    // A leftover Supabase cookie means the person WAS signed in, so their session expired.
+    const hadSession = request.cookies.getAll().some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
+    const url = new URL("/login", request.url);
+    if (hadSession) url.searchParams.set("reason", "expired");
+    return NextResponse.redirect(url);
+  }
   if (loggedIn && onLogin) return NextResponse.redirect(new URL("/students", request.url));
   return response;
 }

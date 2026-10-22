@@ -4,36 +4,52 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import AddBatch from "@/components/AddBatch";
 import ErrorBox from "@/components/ErrorBox";
-import { button, card, errorText, input, label } from "@/lib/ui";
+import { button, buttonLight, card, errorText, input, label } from "@/lib/ui";
+import { isValidDate, todayString } from "@/lib/fees";
+import { findDuplicates } from "@/lib/validation";
+import { useSessionGuard } from "@/lib/useSessionGuard";
 
 type Batch = { id: string; name: string };
+type Existing = { id: string; name: string; coach: string; batches: { name: string } | null };
 
 export default function NewStudentPage() {
   const router = useRouter();
+  const guard = useSessionGuard();
   const [batches, setBatches] = useState<Batch[] | null>(null);
   const [loadError, setLoadError] = useState("");
-  const [f, setF] = useState({ name: "", batch_id: "", coach: "", parent_name: "", parent_phone: "", monthly_fee: "" });
+  const [f, setF] = useState({ name: "", batch_id: "", coach: "", parent_name: "", parent_phone: "", monthly_fee: "", joined_on: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [duplicates, setDuplicates] = useState<Existing[] | null>(null); // set when the warning is showing
 
   const loadBatches = useCallback(async (selectId?: string) => {
     setLoadError("");
     const { data, error } = await createClient().from("batches").select("id,name").order("name");
-    if (error) return setLoadError("Couldn't load batches. Please try again.");
+    if (error) {
+      if (await guard(error)) return;
+      return setLoadError("Couldn't load batches. Please try again.");
+    }
     setBatches(data);
     if (selectId) setF((p) => ({ ...p, batch_id: selectId }));
-  }, []);
+  }, [guard]);
 
+  useEffect(() => {
+    setF((p) => (p.joined_on ? p : { ...p, joined_on: todayString() }));
+  }, []);
   useEffect(() => {
     loadBatches();
   }, [loadBatches]);
 
-  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    if (k === "name") setDuplicates(null); // a different name needs a fresh check
     setF((p) => ({ ...p, [k]: e.target.value }));
+  };
 
+  // Step 1: check the form, then look for a student with the same name.
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
     const errs: Record<string, string> = {};
     if (!f.name.trim()) errs.name = "Enter the student's name.";
     if (!f.batch_id) errs.batch_id = "Choose a batch (or add one below).";
@@ -41,9 +57,30 @@ export default function NewStudentPage() {
     if (!/^\+?[0-9 ]{10,14}$/.test(f.parent_phone.trim())) errs.parent_phone = "Enter a valid phone number (10 digits).";
     const fee = Number(f.monthly_fee);
     if (f.monthly_fee.trim() === "" || isNaN(fee) || fee < 0) errs.monthly_fee = "Enter the monthly fee as a number, e.g. 3000.";
+    if (!isValidDate(f.joined_on)) errs.joined_on = "Choose the date the student joined.";
+    else if (f.joined_on > todayString()) errs.joined_on = "The joining date can't be in the future.";
     setErrors(errs);
+    setSaveError("");
     if (Object.keys(errs).length) return;
 
+    setBusy(true);
+    const { data, error } = await createClient().from("students").select("id,name,coach,batches(name)");
+    if (error) {
+      setBusy(false);
+      if (await guard(error)) return;
+      // Never pretend there is no duplicate when we could not check.
+      return setSaveError("Couldn't check whether this student already exists, so nothing was saved. Please try again.");
+    }
+    const same = findDuplicates(data as unknown as Existing[], f.name);
+    if (same.length > 0) {
+      setBusy(false);
+      return setDuplicates(same); // show the warning; the user decides
+    }
+    await insertStudent();
+  }
+
+  // Step 2: the actual save (also used by "Save anyway").
+  async function insertStudent() {
     setBusy(true);
     setSaveError("");
     const { error } = await createClient().from("students").insert({
@@ -52,11 +89,15 @@ export default function NewStudentPage() {
       coach: f.coach.trim(),
       parent_name: f.parent_name.trim() || null,
       parent_phone: f.parent_phone.trim(),
-      monthly_fee: fee,
+      monthly_fee: Number(f.monthly_fee),
+      joined_on: f.joined_on,
     });
-    setBusy(false);
-    if (error) return setSaveError("Could not save the student. Please try again.");
-    router.push("/students");
+    if (error) {
+      setBusy(false); // the form keeps everything you typed
+      if (await guard(error)) return;
+      return setSaveError("Could not save the student. Nothing was saved, and your details are still here. Please try again.");
+    }
+    router.push("/students?added=1");
   }
 
   if (loadError) return <ErrorBox message={loadError} onRetry={() => loadBatches()} />;
@@ -101,10 +142,42 @@ export default function NewStudentPage() {
           <input className={input} inputMode="decimal" value={f.monthly_fee} onChange={set("monthly_fee")} />
           {errors.monthly_fee && <p className={errorText}>{errors.monthly_fee}</p>}
         </div>
-        {saveError && <p className={errorText}>{saveError}</p>}
-        <button className={button} disabled={busy}>
-          Save student
-        </button>
+        <div>
+          <label className={label}>Joined on</label>
+          <input className={input} type="date" max={todayString()} value={f.joined_on} onChange={set("joined_on")} />
+          <p className="mt-1 text-xs text-slate-500">Fees are counted from this month. Change it for students who joined earlier.</p>
+          {errors.joined_on && <p className={errorText}>{errors.joined_on}</p>}
+        </div>
+        {duplicates && (
+          <div role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-medium">
+              {duplicates.length === 1 ? "A student with this name already exists:" : `${duplicates.length} students with this name already exist:`}
+            </p>
+            <ul className="mt-1 list-disc pl-5">
+              {duplicates.map((d) => (
+                <li key={d.id}>
+                  {d.name}
+                  {d.batches?.name ? `, ${d.batches.name}` : ""}, coach {d.coach}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2">Two different students can share a name. If this is a new student, you can save anyway.</p>
+            <div className="mt-3 flex gap-2">
+              <button type="button" className={button} disabled={busy} onClick={insertStudent}>
+                {busy ? "Saving…" : "Save anyway"}
+              </button>
+              <button type="button" className={buttonLight} disabled={busy} onClick={() => setDuplicates(null)}>
+                Go back and edit
+              </button>
+            </div>
+          </div>
+        )}
+        {saveError && <p role="alert" className={errorText}>{saveError}</p>}
+        {!duplicates && (
+          <button className={button} disabled={busy}>
+            {busy ? "Saving…" : "Save student"}
+          </button>
+        )}
       </form>
       <div className={card + " mt-4"}>
         <p className="mb-2 text-sm font-medium">Need a new batch?</p>

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { buildDigest, type Digest } from "@/lib/digest";
-import { todayString } from "@/lib/fees";
+import { addDays, todayString } from "@/lib/fees";
 
 const WINDOW_DAYS = 30;
 const MODEL = "google/gemini-3.7-flash";
@@ -57,9 +57,7 @@ export async function POST() {
   }
 
   const today = todayString();
-  const since = new Date();
-  since.setDate(since.getDate() - (WINDOW_DAYS - 1));
-  const sinceStr = todayString(since);
+  const sinceStr = addDays(today, -(WINDOW_DAYS - 1));
 
   const [s, a, p] = await Promise.all([
     supabase.from("students").select("id,name,monthly_fee,joined_on,batches(name)"),

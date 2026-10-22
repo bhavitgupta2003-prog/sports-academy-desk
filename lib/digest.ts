@@ -1,4 +1,4 @@
-import { monthsOverdue, outstanding } from "./fees";
+import { monthsOverdue, outstanding } from "./fees.ts";
 
 // The only data sent to the AI: counts and balances, no phone numbers or parent names.
 export type Digest = {

@@ -1,8 +1,10 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { button, card } from "@/lib/ui";
 import { rupees } from "@/lib/fees";
 import type { Digest } from "@/lib/digest";
+import { SESSION_EXPIRED_URL } from "@/lib/session";
 
 type Out = {
   result: {
@@ -20,6 +22,7 @@ const badge: Record<string, string> = {
 };
 
 export default function AiSummaryPage() {
+  const router = useRouter();
   const [out, setOut] = useState<Out | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,6 +33,11 @@ export default function AiSummaryPage() {
     setOut(null);
     try {
       const res = await fetch("/api/summary", { method: "POST" });
+      // Logged out: the server either answers 401 or redirects us to the login page.
+      if (res.status === 401 || (res.redirected && new URL(res.url).pathname === "/login")) {
+        router.replace(SESSION_EXPIRED_URL);
+        return;
+      }
       const data = await res.json();
       if (!data.ok) setError(data.error);
       else setOut(data);

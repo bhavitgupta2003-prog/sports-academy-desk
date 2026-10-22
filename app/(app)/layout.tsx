@@ -1,7 +1,9 @@
 "use client";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { SESSION_EXPIRED_URL } from "@/lib/session";
 
 const links = [
   { href: "/students", text: "Students" },
@@ -13,7 +15,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
 
+  const signingOut = useRef(false);
+
+  // If Supabase drops the login while the app is open (e.g. it expired), go to /login with a message.
+  // Clicking "Sign out" yourself does not trigger the expiry message.
+  useEffect(() => {
+    const { data } = createClient().auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT" && !signingOut.current) router.replace(SESSION_EXPIRED_URL);
+    });
+    return () => data.subscription.unsubscribe();
+  }, [router]);
+
   async function signOut() {
+    signingOut.current = true;
     await createClient().auth.signOut();
     router.push("/login");
     router.refresh();
