@@ -6,11 +6,14 @@ import { createClient } from "@/lib/supabase/client";
 import { SESSION_EXPIRED_URL } from "@/lib/session";
 import Brand from "@/components/ui/Brand";
 import Icon, { type IconName } from "@/components/ui/Icon";
+import NotificationsProvider, { NavBadge } from "@/components/NotificationsProvider";
 
 const links: { href: string; text: string; icon: IconName }[] = [
   { href: "/dashboard", text: "Dashboard", icon: "dashboard" },
   { href: "/students", text: "Students", icon: "users" },
   { href: "/attendance", text: "Attendance", icon: "calendarCheck" },
+  { href: "/events", text: "Events", icon: "calendar" },
+  { href: "/notifications", text: "Notifications", icon: "bell" },
   { href: "/ai-summary", text: "AI Summary", icon: "sparkles" },
 ];
 
@@ -54,13 +57,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <Icon name={l.icon} className="h-5 w-5" />
             {l.text}
-            {layout === "side" && active && <span aria-hidden="true" className="ml-auto h-5 w-1 rounded-full bg-emerald-400" />}
+            {l.href === "/notifications" && <NavBadge />}
+            {layout === "side" && active && l.href !== "/notifications" && <span aria-hidden="true" className="ml-auto h-5 w-1 rounded-full bg-emerald-400" />}
           </Link>
         </li>
       );
     });
 
   return (
+    <NotificationsProvider>
     <div className="min-h-screen bg-slate-50 md:flex">
       {/* Sidebar (laptop and larger) */}
       <aside className="hidden bg-navy-900 text-white md:sticky md:top-0 md:flex md:h-screen md:w-64 md:shrink-0 md:flex-col">
@@ -108,5 +113,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">{children}</div>
       </main>
     </div>
+    </NotificationsProvider>
   );
 }

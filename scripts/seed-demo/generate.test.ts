@@ -6,7 +6,7 @@ import { buildRows } from "../../lib/studentList.ts";
 import { summarizeDashboard } from "../../lib/dashboard.ts";
 import { BATCHES, EXCLUDED_NAMES } from "./data.ts";
 import {
-  PROFILE_COUNTS, demoBatchIds, demoStudentIds, expectedStatus, generateDemo, summarize, toRows, validateDataset,
+  PROFILE_COUNTS, RELIABILITY_TIERS, demoBatchIds, demoStudentIds, expectedStatus, generateDemo, summarize, toRows, validateDataset,
 } from "./generate.ts";
 import { uuidV5 } from "./ids.ts";
 
@@ -60,21 +60,27 @@ test("a student's join date never moves earlier on a later run, so a rerun can't
 });
 
 // ---------- volume and shape ----------
-test("volume: 7 batches, 100 students with the planned batch sizes", () => {
-  assert.equal(ds.batches.length, 7);
-  assert.equal(ds.students.length, 100);
+const TOTAL = BATCHES.reduce((sum, b) => sum + b.size, 0); // the number of students planned in data.ts
+
+test("volume: 5 batches, 25 students with the planned batch sizes", () => {
+  assert.equal(ds.batches.length, BATCHES.length);
+  assert.equal(BATCHES.length, 5);
+  assert.equal(TOTAL, 25);
+  assert.equal(ds.students.length, TOTAL);
   for (const spec of BATCHES) {
     const b = ds.batches.find((x) => x.key === spec.key)!;
     assert.equal(ds.students.filter((s) => s.batch_id === b.id).length, spec.size);
   }
 });
 test("volume: attendance and payments are in the planned range", () => {
-  assert.ok(ds.attendance.length > 1800 && ds.attendance.length < 3000, `attendance ${ds.attendance.length}`);
-  assert.ok(ds.payments.length > 350 && ds.payments.length < 650, `payments ${ds.payments.length}`);
+  assert.ok(ds.attendance.length > 300 && ds.attendance.length < 800, `attendance ${ds.attendance.length}`);
+  assert.ok(ds.payments.length > 70 && ds.payments.length < 170, `payments ${ds.payments.length}`);
 });
 test("the planned mix of payer types is exact", () => {
   for (const [profile, n] of Object.entries(PROFILE_COUNTS)) assert.equal(ds.students.filter((s) => s.profile === profile).length, n);
-  assert.equal(Object.values(PROFILE_COUNTS).reduce((a, b) => a + b, 0), 100);
+  assert.equal(Object.values(PROFILE_COUNTS).reduce((a, b) => a + b, 0), TOTAL);
+  assert.equal(RELIABILITY_TIERS.reduce((a, [, n]) => a + n, 0), TOTAL);
+  for (const [r, n] of RELIABILITY_TIERS) assert.equal(ds.students.filter((s) => s.reliability === r).length, n);
 });
 
 // ---------- valid against the real schema ----------
@@ -101,7 +107,7 @@ test("insert order is safe: every student's batch, and every mark/payment's stud
 // ---------- fictional and clearly synthetic ----------
 test("phones are clearly fake (start with 0), unique, and still pass the app's phone check", () => {
   const phones = ds.students.map((s) => s.parent_phone);
-  assert.equal(new Set(phones).size, 100);
+  assert.equal(new Set(phones).size, TOTAL);
   for (const p of phones) {
     assert.match(p, /^00000 \d{5}$/);
     assert.match(p, /^\+?[0-9 ]{10,14}$/);
@@ -109,7 +115,7 @@ test("phones are clearly fake (start with 0), unique, and still pass the app's p
 });
 test("student names are unique and none is a name used in earlier testing", () => {
   const names = ds.students.map((s) => normalizeName(s.name));
-  assert.equal(new Set(names).size, 100);
+  assert.equal(new Set(names).size, TOTAL);
   for (const bad of EXCLUDED_NAMES) assert.equal(names.includes(bad), false);
 });
 test("parents share the child's surname and no parent has a coach's first name", () => {
@@ -121,8 +127,8 @@ test("parents share the child's surname and no parent has a coach's first name",
 });
 
 // ---------- fees use the app's own rules ----------
-test("on 22 Oct 2026: 69 Paid, 3 Due soon, 28 Overdue", () => {
-  assert.deepEqual(summarize(ds).statusCounts, { paid: 69, due_soon: 3, overdue: 28 });
+test("on 22 Oct 2026: 17 Paid, 1 Due soon, 7 Overdue", () => {
+  assert.deepEqual(summarize(ds).statusCounts, { paid: 17, due_soon: 1, overdue: 7 });
 });
 test("every student's status matches their payer type on every test date (incl. before/after the 5th)", () => {
   for (const d of DATES) {
@@ -149,9 +155,9 @@ test("partial payers have paid something but less than a month, and some pay in 
   assert.ok(ds.payments.some((p) => p.note.startsWith("Advance for next month")));
 });
 test("each kind of student has a different payment pattern (variety, not a single script)", () => {
-  assert.ok(new Set(ds.payments.map((p) => p.paid_on.slice(8))).size > 15); // many different pay days
-  assert.ok(new Set(ds.students.map((s) => s.monthly_fee)).size >= 7); // different fees, incl. discounts
-  assert.ok(new Set(ds.students.map((s) => s.joined_on.slice(0, 7))).size >= 7); // joined across 7+ months
+  assert.ok(new Set(ds.payments.map((p) => p.paid_on.slice(8))).size > 8); // many different pay days
+  assert.ok(new Set(ds.students.map((s) => s.monthly_fee)).size >= 5); // different fees, incl. discounts
+  assert.ok(new Set(ds.students.map((s) => s.joined_on.slice(0, 7))).size >= 5); // joined across 5+ different months
 });
 
 // ---------- attendance ----------
@@ -187,22 +193,20 @@ test("attendance varies: a spread of attendance rates between students, and abse
   const overall = ds.attendance.filter((a) => a.status === "present").length / ds.attendance.length;
   assert.ok(overall > 0.65 && overall < 0.9, `overall ${overall}`);
 });
-test("the AI summary window (last 30 days) would have more than 1,000 rows, so paged reading is needed", () => {
-  const since = "2026-09-23";
-  assert.ok(ds.attendance.filter((a) => a.date >= since).length > 800);
-});
-
 // ---------- what the website shows, using the app's own code ----------
 test("the dashboard numbers come out sensibly from the app's own functions", () => {
   const paid = ds.payments.map((p) => ({ student_id: p.student_id, amount: p.amount }));
   const rows = buildRows(ds.students.map((s) => ({ ...s, batches: { name: ds.batches.find((b) => b.id === s.batch_id)!.name } })), paid, TODAY);
   const marks = ds.attendance.filter((a) => a.date === TODAY).map((a) => ({ student_id: a.student_id, status: a.status }));
   const d = summarizeDashboard(rows, marks);
-  assert.equal(d.students, 100);
-  assert.equal(d.batches, 7);
-  assert.equal(d.overdue.length, 28);
-  assert.equal(d.studentsOwing, 31);
-  assert.equal(d.present + d.absent + d.notMarked, 100);
+  const sum = summarize(ds);
+  assert.equal(d.students, TOTAL);
+  assert.equal(d.batches, 5);
+  assert.equal(d.overdue.length, sum.statusCounts.overdue);
+  assert.equal(d.overdue.length, 7);
+  assert.equal(d.studentsOwing, sum.studentsOwing);
+  assert.equal(d.totalOutstanding, sum.totalOutstanding);
+  assert.equal(d.present + d.absent + d.notMarked, TOTAL);
   assert.ok(d.present > 0 && d.absent >= 0);
-  assert.ok(d.totalOutstanding > 90_000 && d.totalOutstanding < 130_000);
+  assert.ok(d.totalOutstanding > 25_000 && d.totalOutstanding < 50_000);
 });

@@ -11,8 +11,16 @@
 begin;
 
 -- A parent row must be identifiable by (id, owner_id) so children can point at both.
-alter table batches  add constraint batches_id_owner_key  unique (id, owner_id);
-alter table students add constraint students_id_owner_key unique (id, owner_id);
+-- (Each is added only if missing, so this also works after migration 002, which adds the batches one.)
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'batches_id_owner_key' and conrelid = 'public.batches'::regclass) then
+    alter table public.batches add constraint batches_id_owner_key unique (id, owner_id);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'students_id_owner_key' and conrelid = 'public.students'::regclass) then
+    alter table public.students add constraint students_id_owner_key unique (id, owner_id);
+  end if;
+end $$;
 
 -- students -> batches: the batch must belong to the same account.
 alter table students drop constraint if exists students_batch_id_fkey;

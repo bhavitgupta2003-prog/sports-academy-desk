@@ -9,17 +9,20 @@ import { hash01, uuidV5 } from "./ids.ts";
 
 export type Profile = "regular" | "late" | "ahead" | "partial" | "behind1" | "behind2" | "behind3" | "new_unpaid";
 
-/** How many students behave each way. Adds up to 100. */
+/** How many students behave each way. Must add up to the number of students in data.ts (25). */
 export const PROFILE_COUNTS: Record<Profile, number> = {
-  regular: 56, // pays every month, early
-  late: 10, // pays every month but after the due date
-  ahead: 3, // paid next month's fee in advance
-  partial: 11, // paid only part of this month's fee
-  behind1: 9, // has not paid this month
-  behind2: 5, // has not paid the last two months
-  behind3: 3, // has not paid for three or four months
-  new_unpaid: 3, // joined today, first fee not paid yet
+  regular: 13, // pays every month, early
+  late: 3, // pays every month but after the due date
+  ahead: 1, // paid next month's fee in advance
+  partial: 3, // paid only part of this month's fee
+  behind1: 2, // has not paid this month
+  behind2: 1, // has not paid the last two months
+  behind3: 1, // has not paid for three or four months
+  new_unpaid: 1, // joined today, first fee not paid yet
 };
+
+/** How reliably students attend: [chance of being present, how many students]. Adds up to 25. */
+export const RELIABILITY_TIERS: [number, number][] = [[0.92, 14], [0.78, 6], [0.58, 3], [0.38, 2]];
 
 export const WINDOW_DAYS = 61; // about two months of history, plus today
 const SEED = 20261022;
@@ -144,6 +147,12 @@ function buildNames(rng: () => number, count: number): { first: string; surname:
 function buildStudents(asOf: string, userId: string, batches: DemoBatch[]): DemoStudent[] {
   const rng = mulberry32(SEED); // the same students every time, whatever today's date is
   const slots = BATCHES.flatMap((b, bi) => Array.from({ length: b.size }, () => bi));
+  const profileTotal = Object.values(PROFILE_COUNTS).reduce((a, b) => a + b, 0);
+  const tierTotal = RELIABILITY_TIERS.reduce((a, [, n]) => a + n, 0);
+  if (profileTotal !== slots.length || tierTotal !== slots.length) {
+    throw new Error(`Counts must add up to ${slots.length} students (profiles ${profileTotal}, attendance tiers ${tierTotal})`);
+  }
+  const reliabilities = shuffle(RELIABILITY_TIERS.flatMap(([p, n]) => Array.from({ length: n }, () => p)), rng);
   const profiles = shuffle((Object.entries(PROFILE_COUNTS) as [Profile, number][]).flatMap(([p, n]) => Array.from({ length: n }, () => p)), rng);
   const names = buildNames(rng, slots.length);
 
@@ -151,11 +160,11 @@ function buildStudents(asOf: string, userId: string, batches: DemoBatch[]): Demo
     const key = demoStudentKey(i);
     const batch = batches[bi];
     const profile = profiles[i];
-    const [u1, u2, u3, u4, u5, u6, u7] = [rng(), rng(), rng(), rng(), rng(), rng(), rng()]; // always the same number of draws per student
+    const [u1, u2, u3, u4, u5, , u7] = [rng(), rng(), rng(), rng(), rng(), rng(), rng()]; // always the same number of draws per student
     const unpaid = profile === "behind1" ? 1 : profile === "behind2" ? 2 : profile === "behind3" ? (u4 < 0.5 ? 3 : 4) : 0;
     const joined_on = pickJoinDate(profile, asOf, unpaid, u1, u2, u3);
     const discount = u5 < 0.12 ? (u5 < 0.06 ? 0.8 : 0.9) : 1; // a few sibling / scholarship discounts
-    const reliability = u6 < 0.62 ? 0.92 : u6 < 0.86 ? 0.78 : u6 < 0.95 ? 0.58 : 0.38;
+    const reliability = reliabilities[i];
     const { first, surname } = names[i];
     const parentFirst = PARENT_FIRST_NAMES[Math.floor(u7 * PARENT_FIRST_NAMES.length)];
     return {

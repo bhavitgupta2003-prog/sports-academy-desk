@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, feeStatus, isValidDate, monthsBilled, monthsOverdue, monthsPastDue, outstanding, todayString } from "./fees.ts";
+import { addDays, earliestUnpaidDueDate, feeStatus, isValidDate, monthsBilled, monthsOverdue, monthsPastDue, outstanding, todayString } from "./fees.ts";
 import { buildDigest, studentLabel } from "./digest.ts";
 
 // ---------- India time zone ----------
@@ -178,4 +178,37 @@ test("monthsPastDue counts only months whose due date has passed", () => {
   assert.equal(monthsPastDue("2026-10-22", "2026-10-22"), 0);
   assert.equal(monthsPastDue("2026-11-20", "2027-01-10"), 3); // 20 Nov, 5 Dec, 5 Jan
   assert.equal(monthsPastDue("2026-12-01", "2026-10-22"), 0);
+});
+
+// ---------- due date of the oldest unpaid fee ----------
+test("earliest unpaid due date: nothing paid yet, joined this month before the 5th", () => {
+  assert.equal(earliestUnpaidDueDate(3000, "2026-10-03", 0, "2026-10-04"), "2026-10-05");
+});
+test("earliest unpaid due date: joined after the 5th means due on the joining day", () => {
+  assert.equal(earliestUnpaidDueDate(3000, "2026-10-22", 0, "2026-10-22"), "2026-10-22");
+});
+test("earliest unpaid due date: payments cover the oldest months first", () => {
+  // joined 15 Sep: Sep due 15 Sep, Oct due 5 Oct. One month paid -> Oct is the oldest unpaid.
+  assert.equal(earliestUnpaidDueDate(3000, "2026-09-15", 3000, "2026-10-22"), "2026-10-05");
+  assert.equal(earliestUnpaidDueDate(3000, "2026-09-15", 0, "2026-10-22"), "2026-09-15");
+  assert.equal(earliestUnpaidDueDate(3000, "2026-09-15", 4500, "2026-10-22"), "2026-10-05"); // half of Oct paid: Oct still unpaid
+});
+test("earliest unpaid due date: fully paid, paid ahead and free students have none", () => {
+  assert.equal(earliestUnpaidDueDate(3000, "2026-09-15", 6000, "2026-10-22"), null);
+  assert.equal(earliestUnpaidDueDate(3000, "2026-09-15", 9000, "2026-10-22"), null);
+  assert.equal(earliestUnpaidDueDate(0, "2026-01-01", 0, "2026-10-22"), null);
+  assert.equal(earliestUnpaidDueDate(3000, "2026-12-01", 0, "2026-10-22"), null); // has not started yet
+});
+test("earliest unpaid due date agrees with the fee status for every combination tried", () => {
+  const dates = ["2026-10-01", "2026-10-04", "2026-10-05", "2026-10-06", "2026-10-22", "2026-10-31", "2026-11-05", "2027-01-05", "2028-02-29"];
+  const joined = ["2026-04-03", "2026-07-20", "2026-09-05", "2026-10-01", "2026-10-05", "2026-10-22", "2026-10-31", "2026-11-05"];
+  for (const today of dates) for (const j of joined) for (const paid of [0, 500, 1000, 1999, 2000, 3500, 4000, 6000, 12000]) {
+    if (j > today) continue;
+    const due = earliestUnpaidDueDate(2000, j, paid, today);
+    const status = feeStatus(2000, j, paid, today);
+    const where = `${today} joined ${j} paid ${paid}`;
+    if (status === "paid") assert.equal(due, null, where);
+    else if (status === "overdue") assert.ok(due !== null && due < today, where);
+    else assert.ok(due !== null && due >= today, where);
+  }
 });

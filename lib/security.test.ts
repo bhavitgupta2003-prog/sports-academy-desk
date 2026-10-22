@@ -114,7 +114,7 @@ test("static: .gitignore excludes local env files but keeps the empty template",
 test("static: schema turns on row level security and an owner-only policy for every table", () => {
   const schema = read("supabase/schema.sql");
   const tables = [...schema.matchAll(/create table (\w+)/g)].map((m) => m[1]);
-  assert.deepEqual(tables.sort(), ["attendance", "batches", "fee_payments", "students"]);
+  assert.deepEqual(tables.sort(), ["attendance", "batches", "events", "fee_payments", "students"]);
   for (const t of tables) {
     assert.match(schema, new RegExp(`alter table ${t} enable row level security`), t);
     assert.match(schema, new RegExp(`create policy "own rows" on ${t} for all using \\(owner_id = auth\\.uid\\(\\)\\) with check \\(owner_id = auth\\.uid\\(\\)\\)`), t);
@@ -130,6 +130,15 @@ test("static: links between tables require the same owner (schema and migration)
   assert.equal((migration.match(/\(student_id, owner_id\) references students/g) ?? []).length, 2); // attendance + fee_payments
   assert.match(migration, /^begin;/m);
   assert.match(migration, /^commit;/m);
+});
+test("static: the events migration has row level security, the owner-only rule, and is all-or-nothing", () => {
+  const m = read("supabase/migrations/002_events.sql");
+  assert.match(m, /^begin;/m);
+  assert.match(m, /^commit;/m);
+  assert.match(m, /alter table public\.events enable row level security/);
+  assert.match(m, /create policy "own rows" on public\.events for all using \(owner_id = auth\.uid\(\)\) with check \(owner_id = auth\.uid\(\)\)/);
+  assert.match(m, /\(batch_id, owner_id\) references public\.batches \(id, owner_id\)/); // an event can only point at a batch of the same account
+  assert.doesNotMatch(m, /\b(delete from|truncate|drop table (?!public\.events;))/i); // it never deletes or drops existing data (the only drop is the commented-out undo)
 });
 test("static: the AI route checks login first, filters by owner, and uses the cooldown", () => {
   const route = read("app/api/summary/route.ts");

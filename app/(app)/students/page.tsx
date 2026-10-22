@@ -41,10 +41,14 @@ export default function StudentsPage() {
 
   useEffect(() => {
     // After Add student we arrive with ?added=1: show a success message once, then tidy the address.
-    if (new URLSearchParams(window.location.search).get("added") === "1") {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("added") === "1") {
       setNotice("Student added successfully.");
       window.history.replaceState(null, "", "/students");
     }
+    // Arrived from a dashboard link such as /students?status=overdue: start with that fee-status filter on.
+    const status = q.get("status");
+    if (status === "paid" || status === "due_soon" || status === "overdue") setFilters((f) => ({ ...f, status }));
   }, []);
 
   useEffect(() => {

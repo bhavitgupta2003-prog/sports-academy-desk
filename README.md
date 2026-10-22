@@ -6,6 +6,8 @@ A small web portal for sports academy owners and coaches to keep students, atten
 
 - **Staff login** with email and password (Supabase Auth). Each account sees only its own data.
 - **Dashboard:** total students, today's attendance, outstanding fees, a list of students with overdue fees, and quick actions. Every number comes from your own records.
+- **Notifications (staff, inside the app):** a bell count in the menu and a Notifications page, worked out from your real records each time the app opens: overdue fees, fees due soon, students with low attendance in the last month (below 60%), and events in the next 7 days. Dismiss one to hide it; it returns if the situation changes (dismissals are remembered in that browser only). Nothing is sent to parents or anyone outside the app.
+- **Events:** add and delete events (title, date, optional time, place, notes and batch). Upcoming ones show on the Dashboard and in Notifications. Needs a one-time database step, see "Database safety" below.
 - **Students:** add a student (name, batch, coach, parent contact, monthly fee, joining date), see them in a list, open their details. Warns when another student has the same name, but still lets you save.
 - **Fees:** the outstanding balance is worked out from the joining month, the monthly fee and the payments recorded. Staff record payments by hand (cash, UPI, etc.). There is no online payment.
 - **Fee status:** every student shows **Paid**, **Due soon** or **Overdue**. Each month's fee is due on the 5th (the joining month: the later of the 5th and the joining day). The list can be searched by name and filtered by batch and fee status.
@@ -62,13 +64,14 @@ The automated tests check the app's logic and read project files for mistakes (f
 
 ## Demo data
 
-`scripts/seed-demo/` can fill your own account with realistic fictional data (7 batches, 100 students, two months of attendance, a varied payment history) and remove it again later. It signs in as you, so database privacy rules stay on. See `scripts/seed-demo/README.md`. Quick start: `npm run seed:demo` previews it without touching anything.
+`scripts/seed-demo/` can fill your own account with realistic fictional data (5 batches, 25 students, two months of attendance, a varied payment history) and remove it again later. It signs in as you, so database privacy rules stay on. See `scripts/seed-demo/README.md`. Quick start: `npm run seed:demo` previews it without touching anything.
 
 ## Database safety
 
 Every table has Row Level Security: a login can read and change only rows whose `owner_id` is its own. Links between tables (student → batch, attendance/payment → student) also require the same `owner_id`.
 
 - New project: run `supabase/schema.sql`.
+- **Events** need their own table. If you set up before events existed, run `supabase/migrations/002_events.sql` once in the SQL Editor (it only adds the `events` table). Until then the app works as normal and the Events page explains the missing step. Migrations 001 and 002 can be run in either order.
 - Project created from the first version of the schema: run `supabase/migrations/001_same_account_references.sql` once.
 - To check isolation: run `supabase/tests/isolation_check.sql` in the SQL Editor. It uses two made-up users and always rolls itself back, so nothing is saved. Read the PASS / FAIL lines in the message it ends with.
 
@@ -87,6 +90,8 @@ Every table has Row Level Security: a login can read and change only rows whose 
 - **AI cooldown is only a speed bump.** It is kept in one server's memory (15 seconds per user), so on Vercel it cannot stop a determined person. For a real limit, set a spending cap on the OpenRouter key.
 - **AI Summary needs data:** at least one student and some attendance in the last 30 days. Its suggestions can be wrong; the "Facts used" table shows the real numbers.
 - Supabase returns at most 1,000 rows per request, so the AI summary, dashboard and student list read payments and attendance page by page (`lib/fetchAll.ts`). Other screens read one batch or one student at a time and stay well under that.
+- Notifications are for staff inside the app only. Nothing is sent to parents (no WhatsApp, SMS or email), and dismissals are not shared between staff or browsers.
+- Events can be added and deleted, not edited (delete and re-add to change one).
 - No edit or delete for students, batches, attendance or payments yet. No password reset. No notifications of any kind (no WhatsApp, SMS or email), no online payments.
 - Fee status uses a fixed due day (the 5th) set by `DUE_DAY` in `lib/fees.ts`.
 - The logic is covered by automated tests, but the logged-in screens have only been partly checked in a browser. Click through them by hand after each deploy.

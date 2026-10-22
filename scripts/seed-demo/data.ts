@@ -11,13 +11,11 @@ export type BatchSpec = {
 };
 
 export const BATCHES: BatchSpec[] = [
-  { key: "cricket-u12", name: "Cricket U-12 (Mon/Wed/Fri 5 PM)", coach: "Coach Anil Deshmukh", weekdays: [1, 3, 5], size: 18, fee: 2500 },
-  { key: "cricket-u16", name: "Cricket U-16 (Tue/Thu/Sat 6 AM)", coach: "Coach Vikram Joshi", weekdays: [2, 4, 6], size: 16, fee: 3000 },
-  { key: "football-u14", name: "Football U-14 (Mon/Wed/Fri 6 PM)", coach: "Coach Farhan Qureshi", weekdays: [1, 3, 5], size: 16, fee: 2000 },
-  { key: "badminton-juniors", name: "Badminton Juniors (Tue/Thu/Sat 5:30 PM)", coach: "Coach Neha Kulkarni", weekdays: [2, 4, 6], size: 14, fee: 3500 },
-  { key: "tennis-beginners", name: "Tennis Beginners (Mon/Wed 4:30 PM)", coach: "Coach Sandeep Rao", weekdays: [1, 3], size: 10, fee: 4500 },
-  { key: "swimming-learners", name: "Swimming Learners (Tue/Thu/Sat 7 AM)", coach: "Coach Kavita Nair", weekdays: [2, 4, 6], size: 14, fee: 3000 },
-  { key: "basketball-u16", name: "Basketball U-16 (Wed/Fri/Sun 5 PM)", coach: "Coach Rohit Menon", weekdays: [3, 5, 0], size: 12, fee: 2200 },
+  { key: "cricket-u12", name: "Cricket U-12 (Mon/Wed/Fri 5 PM)", coach: "Coach Anil Deshmukh", weekdays: [1, 3, 5], size: 7, fee: 2500 },
+  { key: "football-u14", name: "Football U-14 (Mon/Wed/Fri 6 PM)", coach: "Coach Farhan Qureshi", weekdays: [1, 3, 5], size: 5, fee: 2000 },
+  { key: "badminton-juniors", name: "Badminton Juniors (Tue/Thu/Sat 5:30 PM)", coach: "Coach Neha Kulkarni", weekdays: [2, 4, 6], size: 5, fee: 3500 },
+  { key: "swimming-learners", name: "Swimming Learners (Tue/Thu/Sat 7 AM)", coach: "Coach Kavita Nair", weekdays: [2, 4, 6], size: 4, fee: 3000 },
+  { key: "tennis-beginners", name: "Tennis Beginners (Mon/Wed 4:30 PM)", coach: "Coach Sandeep Rao", weekdays: [1, 3], size: 4, fee: 4500 },
 ];
 
 export const FIRST_NAMES = [

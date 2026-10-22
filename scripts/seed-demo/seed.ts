@@ -5,6 +5,8 @@
 //   --apply --yes           Sign in as you and INSERT the demo rows (rows that already exist are skipped).
 //   --remove-demo           Sign in as you and show what removing the demo rows would delete (preview only).
 //   --remove-demo --yes     Actually delete ONLY the demo rows (found by their fixed ids). Nothing else is touched.
+//   --emit-sql --user-id ID Print the demo data as SQL to paste into the Supabase SQL Editor. No network, no password.
+//   --emit-remove-sql --user-id ID   Print SQL that removes ONLY the demo rows (same way).
 //
 // It signs in with YOUR email and password (SEED_EMAIL / SEED_PASSWORD) and uses the same public key as the
 // website, so Row Level Security stays on and every row belongs to you. No service-role key is used.
@@ -16,17 +18,20 @@ import { buildRows, type PaymentRow, type StudentRow } from "../../lib/studentLi
 import { normalizeName } from "../../lib/validation.ts";
 import { demoBatchIds, demoStudentIds, generateDemo, toRows, validateDataset } from "./generate.ts";
 import { printPreview } from "./preview.ts";
+import { buildInsertSql, buildRemoveSql, isUuid } from "./sql.ts";
 
-type Mode = "dry-run" | "check" | "apply" | "remove";
+type Mode = "dry-run" | "check" | "apply" | "remove" | "emit-sql" | "emit-remove-sql";
 const DRY_RUN_USER = "00000000-0000-0000-0000-000000000000"; // placeholder: the dry run never signs in
 
 function parseArgs(argv: string[]) {
   const flags = new Set<string>();
   let asOf = todayString();
+  let userId = "";
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--as-of") asOf = argv[++i] ?? "";
-    else if (["--dry-run", "--check", "--apply", "--remove-demo", "--yes", "--allow-name-clash", "--help"].includes(a)) flags.add(a);
+    else if (a === "--user-id") userId = argv[++i] ?? "";
+    else if (["--dry-run", "--check", "--apply", "--remove-demo", "--emit-sql", "--emit-remove-sql", "--yes", "--allow-name-clash", "--help"].includes(a)) flags.add(a);
     else throw new Error(`Unknown option: ${a}. Use --help to see the options.`);
   }
   if (flags.has("--help")) return { help: true as const };
@@ -35,8 +40,10 @@ function parseArgs(argv: string[]) {
   if (flags.has("--check")) modes.push("check");
   if (flags.has("--apply")) modes.push("apply");
   if (flags.has("--remove-demo")) modes.push("remove");
-  if (modes.length > 1) throw new Error("Choose only one of --dry-run, --check, --apply, --remove-demo.");
-  return { help: false as const, mode: modes[0] ?? "dry-run", yes: flags.has("--yes"), allowClash: flags.has("--allow-name-clash"), asOf };
+  if (flags.has("--emit-sql")) modes.push("emit-sql");
+  if (flags.has("--emit-remove-sql")) modes.push("emit-remove-sql");
+  if (modes.length > 1) throw new Error("Choose only one of --dry-run, --check, --apply, --remove-demo, --emit-sql, --emit-remove-sql.");
+  return { help: false as const, mode: modes[0] ?? "dry-run", yes: flags.has("--yes"), allowClash: flags.has("--allow-name-clash"), asOf, userId };
 }
 
 const HELP = `Usage: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON [--env-file=.env.local] scripts/seed-demo/seed.ts [option]
@@ -48,6 +55,8 @@ const HELP = `Usage: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON [--env-
   --remove-demo --yes delete ONLY the demo rows.
   --as-of YYYY-MM-DD  build the data for a different "today" (default: today in India).
   --allow-name-clash  insert even if a demo name matches one of your existing students.
+  --emit-sql --user-id ID         print the demo data as SQL for the Supabase SQL Editor (no password).
+  --emit-remove-sql --user-id ID  print SQL that removes only the demo rows.
 `;
 
 const chunk = <T>(items: T[], size: number): T[][] => {
@@ -225,6 +234,19 @@ async function main() {
   if (args.mode === "dry-run") {
     console.log("DRY RUN: no network, no password, nothing is written.");
     process.exitCode = printPreview(args.asOf, DRY_RUN_USER) ? 0 : 1;
+  } else if (args.mode === "emit-sql" || args.mode === "emit-remove-sql") {
+    if (!isUuid(args.userId)) throw new Error("Add --user-id <your account id>. Find it in Supabase: Authentication > Users (the User UID column).");
+    // The SQL goes to standard output so it can be saved or copied; messages go to standard error.
+    if (args.mode === "emit-sql") {
+      const ds = generateDemo(args.asOf, args.userId);
+      const problems = validateDataset(ds);
+      if (problems.length) throw new Error(`The generated data failed validation:\n  ${problems.slice(0, 5).join("\n  ")}`);
+      process.stdout.write(buildInsertSql(ds, args.userId));
+      console.error(`Wrote the demo-data SQL (${ds.students.length} students, ${ds.attendance.length} attendance marks, ${ds.payments.length} payments) for account ${args.userId}.`);
+    } else {
+      process.stdout.write(buildRemoveSql(args.userId));
+      console.error(`Wrote the SQL that removes only the demo rows for account ${args.userId}.`);
+    }
   } else if (args.mode === "check") await check(args.asOf);
   else if (args.mode === "apply") await apply(args.asOf, args.yes, args.allowClash);
   else await removeDemo(args.yes);

@@ -69,23 +69,39 @@ export type FeeStatus = "paid" | "due_soon" | "overdue";
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
 /**
- * How many billed months have a due date BEFORE today.
- * A month is due on DUE_DAY, except the joining month: if the student joined after
- * DUE_DAY, that first fee is due on the joining day.
+ * The due date of the i-th billed month (0 = the joining month).
+ * A month is due on DUE_DAY, except the joining month: if the student joined after DUE_DAY,
+ * that first fee is due on the joining day.
  */
+function dueDateForMonth(joinedOn: string, i: number): string {
+  const [jy, jm] = joinedOn.split("-").map(Number);
+  const idx = jm - 1 + i;
+  const y = jy + Math.floor(idx / 12);
+  const m = (idx % 12) + 1;
+  const standard = `${y}-${pad2(m)}-${pad2(DUE_DAY)}`;
+  return i === 0 && joinedOn > standard ? joinedOn : standard;
+}
+
+/** How many billed months have a due date BEFORE today. */
 export function monthsPastDue(joinedOn: string, today: string): number {
   const billed = monthsBilled(joinedOn, today);
-  const [jy, jm] = joinedOn.split("-").map(Number);
   let count = 0;
-  for (let i = 0; i < billed; i++) {
-    const idx = jm - 1 + i;
-    const y = jy + Math.floor(idx / 12);
-    const m = (idx % 12) + 1;
-    const standard = `${y}-${pad2(m)}-${pad2(DUE_DAY)}`;
-    const due = i === 0 && joinedOn > standard ? joinedOn : standard;
-    if (due < today) count++;
-  }
+  for (let i = 0; i < billed; i++) if (dueDateForMonth(joinedOn, i) < today) count++;
   return count;
+}
+
+/**
+ * The due date of the oldest fee that is not fully paid yet (payments are applied to the oldest months first),
+ * or null when everything billed so far is paid. Before today means overdue; today or later means due soon.
+ */
+export function earliestUnpaidDueDate(monthlyFee: number, joinedOn: string, totalPaid: number, today: string): string | null {
+  if (!isValidDate(joinedOn) || !isValidDate(today)) return null;
+  const feePaise = toPaise(monthlyFee);
+  if (feePaise <= 0) return null;
+  const billed = monthsBilled(joinedOn, today);
+  const monthsCovered = Math.floor(toPaise(totalPaid) / feePaise);
+  if (monthsCovered >= billed) return null;
+  return dueDateForMonth(joinedOn, monthsCovered);
 }
 
 /**

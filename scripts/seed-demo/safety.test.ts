@@ -51,5 +51,5 @@ test("static: writing needs --yes, and removing only previews without it", () =>
   assert.ok(removeFn.indexOf("if (!yes)") < removeFn.indexOf(".delete()"), "the --yes check comes before any delete");
 });
 test("static: the dry run and generator make no network calls", () => {
-  for (const f of ["generate.ts", "preview.ts", "data.ts", "ids.ts"]) assert.doesNotMatch(source(f), /@supabase|fetch\(|https?:\/\//i, f);
+  for (const f of ["generate.ts", "preview.ts", "data.ts", "ids.ts", "sql.ts"]) assert.doesNotMatch(source(f), /@supabase|fetch\(|https?:\/\//i, f);
 });

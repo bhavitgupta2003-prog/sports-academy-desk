@@ -66,7 +66,7 @@ export default function StudentDetail({ params }: { params: Promise<{ id: string
       const back = new URLSearchParams();
       const batch = q.get("batch") ?? "";
       const date = q.get("date") ?? "";
-      if (/^[0-9a-f-]{36}$/i.test(batch)) back.set("batch", batch);
+      if (batch === "all" || /^[0-9a-f-]{36}$/i.test(batch)) back.set("batch", batch);
       if (isValidDate(date)) back.set("date", date);
       setBackHref(back.toString() ? `/attendance?${back}` : "/attendance");
     }

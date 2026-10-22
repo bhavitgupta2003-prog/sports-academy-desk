@@ -2,9 +2,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/fetchAll";
+import { STATUS_FILTERS, attendanceCounts, filterAttendance, type AttendanceStatusFilter } from "@/lib/attendanceFilter";
 import AddBatch from "@/components/AddBatch";
 import ErrorBox from "@/components/ErrorBox";
-import { input } from "@/lib/ui";
+import { buttonLight, input } from "@/lib/ui";
 import Avatar from "@/components/ui/Avatar";
 import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
@@ -18,7 +20,8 @@ import { validateRecordDate } from "@/lib/validation";
 import { useSessionGuard } from "@/lib/useSessionGuard";
 
 type Batch = { id: string; name: string };
-type Student = { id: string; name: string };
+type Student = { id: string; name: string; batchName?: string };
+const ALL = "all"; // the "All batches" choice
 
 export default function AttendancePage() {
   const guard = useSessionGuard();
@@ -33,6 +36,8 @@ export default function AttendancePage() {
   const [error, setError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [notice, setNotice] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<AttendanceStatusFilter>("all");
   const latestLoad = useRef(0); // lets us ignore answers that arrive after you changed batch/date
 
   const dateError = ready ? validateRecordDate(date, todayString(), "attendance") : null;
@@ -64,7 +69,7 @@ export default function AttendancePage() {
       }
       setError("");
       setBatches(data);
-      setBatchId((cur) => selectId ?? (cur && data.some((b) => b.id === cur) ? cur : ""));
+      setBatchId((cur) => selectId ?? (cur === ALL || (cur && data.some((b) => b.id === cur)) ? cur : ""));
     },
     [guard],
   );
@@ -80,17 +85,37 @@ export default function AttendancePage() {
     }
     setLoadingStudents(true);
     const db = createClient();
-    const { data: s, error: e1 } = await db.from("students").select("id,name").eq("batch_id", batchId).order("name");
-    if (mine !== latestLoad.current) return;
-    if (e1) {
-      setLoadingStudents(false);
-      if (await guard(e1)) return;
-      return setError("Couldn't load students. Please try again.");
+    const isAll = batchId === ALL;
+    let s: Student[];
+    if (isAll) {
+      // Every student in the academy, grouped by batch.
+      const res = await db.from("students").select("id,name,batches(name)").order("name");
+      if (mine !== latestLoad.current) return;
+      if (res.error) {
+        setLoadingStudents(false);
+        if (await guard(res.error)) return;
+        return setError("Couldn't load students. Please try again.");
+      }
+      s = (res.data as unknown as { id: string; name: string; batches: { name: string } | null }[])
+        .map((x) => ({ id: x.id, name: x.name, batchName: x.batches?.name ?? "No batch" }))
+        .sort((p, q) => (p.batchName ?? "").localeCompare(q.batchName ?? "") || p.name.localeCompare(q.name));
+    } else {
+      const res = await db.from("students").select("id,name").eq("batch_id", batchId).order("name");
+      if (mine !== latestLoad.current) return;
+      if (res.error) {
+        setLoadingStudents(false);
+        if (await guard(res.error)) return;
+        return setError("Couldn't load students. Please try again.");
+      }
+      s = res.data;
     }
     const ids = s.map((x) => x.id);
-    const { data: a, error: e2 } = ids.length
-      ? await db.from("attendance").select("student_id,status").eq("date", date).in("student_id", ids)
-      : { data: [], error: null };
+    // For one batch, ask for just its students' marks; for all batches, read the day's marks in pages.
+    const { data: a, error: e2 } = isAll
+      ? await fetchAll<{ student_id: string; status: string }>((from, to) => db.from("attendance").select("student_id,status").eq("date", date).order("id").range(from, to))
+      : ids.length
+        ? await db.from("attendance").select("student_id,status").eq("date", date).in("student_id", ids)
+        : { data: [], error: null };
     if (mine !== latestLoad.current) return;
     if (e2) {
       setLoadingStudents(false);
@@ -140,12 +165,19 @@ export default function AttendancePage() {
     loadStudents();
   };
 
-  const batchName = batches?.find((b) => b.id === batchId)?.name;
-  const markedCount = students ? students.filter((s) => marks[s.id]).length : 0;
+  const isAll = batchId === ALL;
+  const batchName = isAll ? "All batches" : batches?.find((b) => b.id === batchId)?.name;
+  const counts = attendanceCounts(students ?? [], marks);
+  const shown = students ? filterAttendance(students, marks, { search, status: statusFilter }) : [];
+  const filtering = search.trim() !== "" || statusFilter !== "all";
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+  };
 
   return (
     <div className="max-w-3xl">
-      <PageHeader title="Attendance" description="Choose a batch and a date, then mark each student present or absent. Each tap saves straight away." />
+      <PageHeader title="Attendance" description="Choose a batch (or All batches) and a date, then mark each student present or absent. Each tap saves straight away. Use the filters to find who still needs marking." />
 
       {error && <ErrorBox message={error} onRetry={retry} />}
       {!error && batches === null && <LoadingState label="Loading batches…" />}
@@ -162,6 +194,7 @@ export default function AttendancePage() {
             <Field label="Batch" htmlFor="batch">
               <select id="batch" className={input} value={batchId} onChange={(e) => setBatchId(e.target.value)}>
                 <option value="">Select a batch…</option>
+                <option value={ALL}>All batches</option>
                 {batches.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
@@ -214,45 +247,104 @@ export default function AttendancePage() {
       )}
 
       {!loadingStudents && students && students.length > 0 && (
-        <Card flush title={batchName} description={`${markedCount} of ${students.length} marked for ${date}`}>
-          <ul className="divide-y divide-slate-100">
-            {students.map((s) => (
-              <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-                <Link
-                  href={`/students/${s.id}?from=attendance&batch=${batchId}&date=${date}`}
-                  className="flex min-w-0 items-center gap-3 rounded-md"
+        <>
+          <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div role="group" aria-label="Filter by attendance status" className="flex flex-wrap gap-2">
+              {STATUS_FILTERS.map((f) => (
+                <button
+                  key={f.value}
+                  aria-pressed={statusFilter === f.value}
+                  onClick={() => setStatusFilter(f.value)}
+                  className={`rounded-full border px-3 py-1.5 text-sm font-medium ${
+                    statusFilter === f.value ? "border-emerald-700 bg-emerald-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
                 >
-                  <Avatar name={s.name} />
-                  <span className="truncate font-medium text-slate-900 hover:text-emerald-800 hover:underline">{s.name}</span>
-                </Link>
-                <span className="flex items-center gap-2">
-                  {saving[s.id] && <span role="status" className="text-xs text-slate-600">Saving…</span>}
-                  {(["present", "absent"] as const).map((st) => {
-                    const on = marks[s.id] === st;
-                    return (
-                      <button
-                        key={st}
-                        onClick={() => mark(s, st)}
-                        disabled={!!saving[s.id]}
-                        aria-pressed={on}
-                        className={`inline-flex min-h-10 min-w-28 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium capitalize shadow-sm disabled:opacity-60 ${
-                          on
-                            ? st === "present"
-                              ? "border-emerald-700 bg-emerald-700 text-white"
-                              : "border-red-700 bg-red-700 text-white"
-                            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <Icon name={st === "present" ? "checkCircle" : "xCircle"} className="h-4 w-4" />
-                        {st}
-                      </button>
-                    );
-                  })}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
+                  {f.label} <span className="tabular-nums">({counts[f.value]})</span>
+                </button>
+              ))}
+            </div>
+            <div className="relative lg:w-64">
+              <label htmlFor="attendance-search" className="sr-only">
+                Search students by name
+              </label>
+              <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                id="attendance-search"
+                className={input + " pl-9"}
+                placeholder="Search by name…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {shown.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={statusFilter === "not_marked" && !search.trim() ? "checkCircle" : "search"}
+                title={statusFilter === "not_marked" && !search.trim() ? "Everyone is marked" : "No students match the filters"}
+                action={
+                  filtering && (
+                    <button className={buttonLight} onClick={clearFilters}>
+                      Clear filters
+                    </button>
+                  )
+                }
+              >
+                {statusFilter === "not_marked" && !search.trim()
+                  ? `Every student in ${batchName} has been marked for ${date}.`
+                  : "Try a different name or status."}
+              </EmptyState>
+            </Card>
+          ) : (
+            <Card
+              flush
+              title={batchName}
+              description={`${counts.marked} of ${counts.all} marked for ${date}${filtering ? ` · showing ${shown.length}` : ""}`}
+            >
+              <ul className="divide-y divide-slate-100">
+                {shown.map((s) => (
+                  <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                    <Link
+                      href={`/students/${s.id}?from=attendance&batch=${batchId}&date=${date}`}
+                      className="flex min-w-0 items-center gap-3 rounded-md"
+                    >
+                      <Avatar name={s.name} />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-slate-900 hover:text-emerald-800 hover:underline">{s.name}</span>
+                        {isAll && s.batchName && <span className="block truncate text-xs text-slate-500">{s.batchName}</span>}
+                      </span>
+                    </Link>
+                    <span className="flex items-center gap-2">
+                      {saving[s.id] && <span role="status" className="text-xs text-slate-600">Saving…</span>}
+                      {(["present", "absent"] as const).map((st) => {
+                        const on = marks[s.id] === st;
+                        return (
+                          <button
+                            key={st}
+                            onClick={() => mark(s, st)}
+                            disabled={!!saving[s.id]}
+                            aria-pressed={on}
+                            className={`inline-flex min-h-10 min-w-28 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium capitalize shadow-sm disabled:opacity-60 ${
+                              on
+                                ? st === "present"
+                                  ? "border-emerald-700 bg-emerald-700 text-white"
+                                  : "border-red-700 bg-red-700 text-white"
+                                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                            }`}
+                          >
+                            <Icon name={st === "present" ? "checkCircle" : "xCircle"} className="h-4 w-4" />
+                            {st}
+                          </button>
+                        );
+                      })}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );

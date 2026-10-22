@@ -1,5 +1,5 @@
 -- Full schema for a FRESH Supabase project. Run once: SQL Editor > New query > paste > Run.
--- (Already have the first version? Run supabase/migrations/001_same_account_references.sql instead.)
+-- (Already have the first version? Run supabase/migrations/001_same_account_references.sql, then 002_events.sql.)
 -- Links between tables also require the same owner_id, so one account can never point at another's rows.
 create table batches (
   id uuid primary key default gen_random_uuid(),
@@ -42,13 +42,28 @@ create table fee_payments (
   foreign key (student_id, owner_id) references students (id, owner_id) on delete cascade
 );
 
+create table events (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  title text not null check (char_length(btrim(title)) between 1 and 120),
+  event_date date not null,
+  event_time time,
+  location text check (location is null or char_length(location) <= 120),
+  notes text check (notes is null or char_length(notes) <= 500),
+  batch_id uuid, -- empty means "all batches"
+  foreign key (batch_id, owner_id) references batches (id, owner_id) on delete set null (batch_id)
+);
+create index events_owner_date_idx on events (owner_id, event_date);
+
 -- Row Level Security: each login can only see and change its own rows.
 alter table batches enable row level security;
 alter table students enable row level security;
 alter table attendance enable row level security;
 alter table fee_payments enable row level security;
+alter table events enable row level security;
 
 create policy "own rows" on batches for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 create policy "own rows" on students for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 create policy "own rows" on attendance for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 create policy "own rows" on fee_payments for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+create policy "own rows" on events for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());

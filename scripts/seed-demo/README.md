@@ -1,17 +1,17 @@
 # Demo data for Sports Academy Desk
 
-Fills your own account with realistic, **fictional** data so the app can be shown with a full database: 7 batches, 100 students, about two months of attendance and a varied payment history. Everything goes through the normal app database tables. Nothing in the app is faked: the dashboard, lists and AI Summary read these rows like any others.
+Fills your own account with realistic, **fictional** data so the app can be shown with a full database: 5 batches, 25 students, about two months of attendance and a varied payment history. Everything goes through the normal app database tables. Nothing in the app is faked: the dashboard, lists and AI Summary read these rows like any others.
 
 ## What it creates (as of 22 Oct 2026; dates always follow today's date in India)
 
 | Table | Rows | Notes |
 |---|---|---|
-| `batches` | 7 | Cricket U-12 and U-16, Football U-14, Badminton Juniors, Tennis Beginners, Swimming Learners, Basketball U-16. The weekly schedule is in the batch name. |
-| `students` | 100 | Fictional names, fictional coaches, joined across the last ~7 months, a few with discounted fees. Parent phones look like `00000 00042`: real Indian mobile numbers never start with 0. |
-| `attendance` | ~2,175 | The last 61 days on each batch's real weekdays, plus today for some batches. Different students attend at different rates. |
-| `fee_payments` | ~490 | UPI, cash and bank transfers, some in instalments. |
+| `batches` | 5 | Cricket U-12, Football U-14, Badminton Juniors, Swimming Learners, Tennis Beginners. The weekly schedule is in the batch name. |
+| `students` | 25 | Fictional names, fictional coaches, joined across the last ~7 months, a few with discounted fees. Parent phones look like `00000 00042`: real Indian mobile numbers never start with 0. |
+| `attendance` | ~440 | The last 61 days on each batch's real weekdays, plus today for some batches. Some students attend almost always, a few are irregular. |
+| `fee_payments` | ~100 | UPI, cash and bank transfers, some in instalments. |
 
-Fee balances and statuses are **not stored**. The app works them out from the students and payments with its own fee rules (fee due on the 5th). On 22 Oct 2026 that gives about 69 Paid, 3 Due soon and 28 Overdue, with about Rs 1.0 lakh outstanding.
+Fee balances and statuses are **not stored**. The app works them out from the students and payments with its own fee rules (fee due on the 5th). On 22 Oct 2026 that gives 17 Paid, 1 Due soon and 7 Overdue, with about Rs 36,000 outstanding.
 
 ## How it stays safe
 
@@ -21,7 +21,22 @@ Fee balances and statuses are **not stored**. The app works them out from the st
 - Only the real table columns are written. The schema, RLS and authentication are not changed.
 - It stops if a demo student's name matches one of your existing students (use `--allow-name-clash` to override).
 
-## How to run it
+## Two ways to run it
+
+**A. Paste SQL into the Supabase SQL Editor (no website password needed).** Best if you sign in to Supabase with GitHub or don't remember your website password. The script writes the data as one SQL file.
+
+1. In the Supabase SQL Editor run `select id, email from auth.users order by created_at;` and copy the `id` on the row with your website email. (This id is not a secret.)
+2. Create the SQL, using your id, and copy it:
+   ```bash
+   npm run seed:demo -- --emit-sql --user-id YOUR-ID-HERE | pbcopy
+   ```
+3. In the SQL Editor click **New query**, paste, and **Run**. The last line of the result shows the counts added.
+
+It only adds rows (rows that already exist are skipped), is one all-or-nothing transaction, and checks that the account id exists first. Remove the demo data the same way with `--emit-remove-sql --user-id YOUR-ID-HERE | pbcopy`. The SQL Editor runs as an admin role, so the SQL names the owner on every row; the script checks the id is a real uuid so nothing else can be slipped in.
+
+**B. Sign in as yourself with your website email and password** (the steps below). The database's privacy rules stay on the whole time.
+
+## How to run it with your website password (option B)
 
 Run these from the project folder. `npm run seed:demo --` passes the options through.
 
@@ -72,6 +87,7 @@ It finds the demo rows by their fixed ids, so your own students, batches, attend
 - `data.ts`: the batches, coaches and name lists.
 - `generate.ts`: builds the dataset in memory (no network) and checks it against the schema rules.
 - `preview.ts`: the printout used by the dry run.
-- `seed.ts`: the command line (`--dry-run`, `--check`, `--apply`, `--remove-demo`).
+- `seed.ts`: the command line (`--dry-run`, `--check`, `--apply`, `--remove-demo`, `--emit-sql`, `--emit-remove-sql`).
+- `sql.ts`: writes the insert and remove SQL for the SQL Editor route (no network).
 - `ids.ts`: fixed ids, so reruns and removal find the same rows.
 - `*.test.ts`: automated tests (run with `npm test`). They check the data and read the script files for unsafe code. They do not talk to your database.
