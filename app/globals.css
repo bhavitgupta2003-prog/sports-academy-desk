@@ -1,7 +1,32 @@
 @import "tailwindcss";
 
+/* Design tokens. Pages use these names (bg-navy-900, bg-brand ...) instead of raw colours. */
+@theme {
+  --color-navy-950: #0a1226;
+  --color-navy-900: #0f1b34;
+  --color-navy-800: #172646;
+  --color-navy-700: #243759;
+  /* Primary green. emerald-700 keeps white text above the 4.5:1 contrast minimum. */
+  --color-brand: #047857;
+  --color-brand-hover: #065f46;
+}
+
 body {
   background: #f8fafc;
   color: #0f172a;
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* One clear keyboard focus ring everywhere. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid #059669;
+  outline-offset: 2px;
+}
+
+/* Respect "reduce motion" settings. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

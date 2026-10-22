@@ -5,12 +5,21 @@
 --
 -- BEFORE migration 001 you should see FAIL on the three "cross-account link" lines (that is the
 -- risk). AFTER migration 001 every line should say PASS.
+--
+-- How to read the report:
+--   PASS              the database did what we want.
+--   FAIL              the database allowed something it should not.
+--   UNEXPECTED ERROR  that test hit a DIFFERENT error than the one it expects (the code is shown),
+--                     so it proves nothing either way. Send the line to whoever is helping you.
+-- If you get a red error that does NOT start with "ISOLATION CHECK RESULTS", the script itself
+-- could not run (for example a permission problem). That is not a security finding, and nothing
+-- was saved.
 
 do $$
 declare
   a uuid := gen_random_uuid();
   b uuid := gen_random_uuid();
-  batch_a uuid; batch_b uuid; student_b uuid;
+  batch_b uuid; student_b uuid;
   n bigint;
   report text := '';
 begin
@@ -25,7 +34,6 @@ begin
 
   -- ----- act as account A -----
   perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated')::text, true);
-  insert into batches (name) values ('A batch') returning id into batch_a;
 
   select count(*) into n from batches where id = batch_b;
   report := report || E'\n' || case when n = 0 then 'PASS' else 'FAIL' end || ': A cannot read B''s batch';
@@ -39,23 +47,44 @@ begin
   get diagnostics n = row_count;
   report := report || E'\n' || case when n = 0 then 'PASS' else 'FAIL' end || ': A cannot delete B''s student';
 
+  -- A tries to create a row that claims to belong to B (the privacy rule must refuse: error 42501).
+  begin
+    insert into batches (owner_id, name) values (b, 'spoofed owner');
+    report := report || E'\nFAIL: A could create a batch owned by B';
+  exception
+    when insufficient_privilege then
+      report := report || E'\nPASS: A cannot create rows owned by B';
+    when others then
+      report := report || E'\nUNEXPECTED ERROR (' || sqlstate || E') in the "create row owned by B" test';
+  end;
+
+  -- Cross-account links: each must be refused by a foreign key (error 23503), and only that error counts.
   begin
     insert into students (name, batch_id, coach, parent_phone, monthly_fee) values ('x', batch_b, 'c', '9999999999', 1);
     report := report || E'\nFAIL: cross-account link: A put a student into B''s batch';
-  exception when others then
-    report := report || E'\nPASS: cross-account link blocked for students -> batches';
+  exception
+    when foreign_key_violation then
+      report := report || E'\nPASS: cross-account link blocked for students -> batches';
+    when others then
+      report := report || E'\nUNEXPECTED ERROR (' || sqlstate || E') in the students -> batches test';
   end;
   begin
     insert into attendance (student_id, date, status) values (student_b, current_date, 'present');
     report := report || E'\nFAIL: cross-account link: A added attendance for B''s student';
-  exception when others then
-    report := report || E'\nPASS: cross-account link blocked for attendance -> students';
+  exception
+    when foreign_key_violation then
+      report := report || E'\nPASS: cross-account link blocked for attendance -> students';
+    when others then
+      report := report || E'\nUNEXPECTED ERROR (' || sqlstate || E') in the attendance -> students test';
   end;
   begin
     insert into fee_payments (student_id, amount) values (student_b, 1);
     report := report || E'\nFAIL: cross-account link: A added a payment for B''s student';
-  exception when others then
-    report := report || E'\nPASS: cross-account link blocked for fee_payments -> students';
+  exception
+    when foreign_key_violation then
+      report := report || E'\nPASS: cross-account link blocked for fee_payments -> students';
+    when others then
+      report := report || E'\nUNEXPECTED ERROR (' || sqlstate || E') in the fee_payments -> students test';
   end;
 
   -- ----- logged out (anonymous) -----
@@ -67,8 +96,11 @@ begin
   begin
     insert into batches (name) values ('anon batch');
     report := report || E'\nFAIL: logged-out visitor could add a batch';
-  exception when others then
-    report := report || E'\nPASS: logged-out visitor cannot add a batch';
+  exception
+    when insufficient_privilege then
+      report := report || E'\nPASS: logged-out visitor cannot add a batch';
+    when others then
+      report := report || E'\nUNEXPECTED ERROR (' || sqlstate || E') in the logged-out insert test';
   end;
 
   reset role;

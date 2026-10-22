@@ -3,7 +3,15 @@ import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import ErrorBox from "@/components/ErrorBox";
-import { button, card, errorText, input, label } from "@/lib/ui";
+import { button, input, td, th } from "@/lib/ui";
+import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
+import Field from "@/components/ui/Field";
+import Icon from "@/components/ui/Icon";
+import LoadingState, { ButtonSpinner } from "@/components/ui/LoadingState";
+import Notice from "@/components/ui/Notice";
+import PageHeader from "@/components/ui/PageHeader";
+import StatCard from "@/components/ui/StatCard";
 import FeeStatusBadge from "@/components/FeeStatusBadge";
 import { feeStatus, isValidDate, monthsBilled, outstanding, rupees, todayString } from "@/lib/fees";
 import { validateRecordDate } from "@/lib/validation";
@@ -92,20 +100,47 @@ export default function StudentDetail({ params }: { params: Promise<{ id: string
     load();
   }
 
+  const backLinks = (
+    <span className="flex flex-wrap gap-x-5 gap-y-1">
+      {backHref && (
+        <Link href={backHref} className="inline-flex items-center gap-1.5 font-medium text-emerald-800 hover:underline">
+          <Icon name="arrowLeft" className="h-4 w-4" />
+          Back to attendance
+        </Link>
+      )}
+      <Link href="/students" className="inline-flex items-center gap-1.5 font-medium text-emerald-800 hover:underline">
+        <Icon name="arrowLeft" className="h-4 w-4" />
+        All students
+      </Link>
+    </span>
+  );
+
   if (notFound) {
     return (
-      <div className="space-y-3">
-        <p className="rounded-md border border-slate-200 bg-white p-4 text-sm">This student could not be found. They may have been removed.</p>
-        <Link href="/students" className="text-sm text-emerald-700 underline">← All students</Link>
+      <div>
+        <PageHeader title="Student not found" back={backLinks} />
+        <Card>
+          <EmptyState icon="users" title="This student could not be found">
+            They may have been removed.
+          </EmptyState>
+        </Card>
       </div>
     );
   }
-  if (error) return <ErrorBox message={error} onRetry={load} />;
+  if (error) {
+    return (
+      <div>
+        <PageHeader title="Student" back={backLinks} />
+        <ErrorBox message={error} onRetry={load} />
+      </div>
+    );
+  }
   if (!student) {
     return (
-      <p role="status" className="text-sm text-slate-500">
-        Loading student…
-      </p>
+      <div>
+        <PageHeader title="Student" back={backLinks} />
+        <LoadingState label="Loading student…" />
+      </div>
     );
   }
 
@@ -117,91 +152,140 @@ export default function StudentDetail({ params }: { params: Promise<{ id: string
   const present = att.filter((a) => a.status === "present").length;
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-4">
-        {backHref && (
-          <Link href={backHref} className="text-sm text-emerald-700 underline">
-            ← Back to attendance
-          </Link>
-        )}
-        <Link href="/students" className="text-sm text-emerald-700 underline">
-          ← All students
-        </Link>
-      </div>
-      <h1 className="text-xl font-semibold">{student.name}</h1>
+    <div>
+      <PageHeader
+        back={backLinks}
+        title={
+          <span className="flex flex-wrap items-center gap-3">
+            {student.name}
+            <FeeStatusBadge status={status} />
+          </span>
+        }
+        description={`${student.batches?.name ?? "No batch"} · Coach ${student.coach}`}
+      />
 
-      <div className={card}>
-        <dl className="grid grid-cols-2 gap-3 text-sm">
-          <div><dt className="text-slate-500">Batch</dt><dd>{student.batches?.name}</dd></div>
-          <div><dt className="text-slate-500">Coach</dt><dd>{student.coach}</dd></div>
-          <div><dt className="text-slate-500">Parent</dt><dd>{student.parent_name || "—"}</dd></div>
-          <div><dt className="text-slate-500">Parent phone</dt><dd>{student.parent_phone}</dd></div>
-          <div><dt className="text-slate-500">Monthly fee</dt><dd>{rupees(fee)}</dd></div>
-          <div><dt className="text-slate-500">Joined</dt><dd>{student.joined_on}</dd></div>
-        </dl>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard
+          label={owed < 0 ? "Paid ahead" : "Outstanding"}
+          icon="rupee"
+          tone={owed > 0 ? "bad" : "good"}
+          value={rupees(owed < 0 ? -owed : owed)}
+          hint={owed > 0 ? `Billed ${monthsBilled(student.joined_on, today)} month(s) × ${rupees(fee)}` : owed < 0 ? "More than has been billed so far" : "All paid up"}
+        />
+        <StatCard label="Paid so far" icon="checkCircle" value={rupees(paid)} hint={`${pays.length} payment${pays.length === 1 ? "" : "s"} recorded`} />
+        <StatCard
+          label="Attendance"
+          icon="userCheck"
+          value={att.length === 0 ? "—" : `${present} of ${att.length}`}
+          hint={att.length === 0 ? "No attendance recorded yet" : "recorded sessions present"}
+        />
       </div>
 
-      <div className={card}>
-        <h2 className="mb-2 font-medium">Fees</h2>
-        <p className="text-sm text-slate-600">
-          Billed {monthsBilled(student.joined_on, today)} month(s) × {rupees(fee)}; paid {rupees(paid)}.
-        </p>
-        <p className={`mt-1 text-lg font-semibold ${owed > 0 ? "text-red-600" : "text-emerald-700"}`}>
-          {owed > 0 ? `Outstanding: ${rupees(owed)}` : owed < 0 ? `Paid ahead: ${rupees(-owed)}` : "All paid up"}
-        </p>
-        <div className="mt-2">
-          <FeeStatusBadge status={status} />
+      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <Card title="Record a payment" description="Staff record payments by hand (cash, UPI and so on).">
+            <form onSubmit={addPayment} noValidate className="grid gap-4 sm:grid-cols-6">
+              <div className="sm:col-span-2">
+                <Field label="Amount (Rs)" htmlFor="amount">
+                  <input id="amount" className={input} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                </Field>
+              </div>
+              <div className="sm:col-span-2">
+                <Field label="Date" htmlFor="paid_on">
+                  <input id="paid_on" className={input} type="date" max={todayString()} value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
+                </Field>
+              </div>
+              <div className="sm:col-span-2">
+                <Field label="Note (cash / UPI…)" htmlFor="note">
+                  <input id="note" className={input} value={note} onChange={(e) => setNote(e.target.value)} />
+                </Field>
+              </div>
+              <div className="sm:col-span-6">
+                <button className={button} disabled={busy}>
+                  {busy && <ButtonSpinner />}
+                  {busy ? "Saving…" : "Record payment"}
+                </button>
+              </div>
+            </form>
+            {payError && <Notice tone="error" className="mt-4">{payError}</Notice>}
+            {payNotice && <Notice tone="success" className="mt-4">{payNotice}</Notice>}
+          </Card>
+
+          <Card flush title="Payment history">
+            {pays.length === 0 ? (
+              <EmptyState icon="rupee" title="No payments recorded yet">
+                Payments you record above will appear here.
+              </EmptyState>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <caption className="sr-only">Payments recorded for {student.name}</caption>
+                  <thead className="border-b border-slate-200 bg-slate-50">
+                    <tr>
+                      <th scope="col" className={th}>Date</th>
+                      <th scope="col" className={th}>Note</th>
+                      <th scope="col" className={th + " text-right"}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {pays.map((p) => (
+                      <tr key={p.id}>
+                        <td className={td + " tabular-nums text-slate-700"}>{p.paid_on}</td>
+                        <td className={td + " text-slate-700"}>{p.note || "—"}</td>
+                        <td className={td + " text-right font-medium tabular-nums text-slate-900"}>{rupees(Number(p.amount))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
         </div>
-        <form onSubmit={addPayment} className="mt-4 grid gap-3 sm:grid-cols-4">
-          <div>
-            <label className={label}>Amount (Rs)</label>
-            <input className={input} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </div>
-          <div>
-            <label className={label}>Date</label>
-            <input className={input} type="date" max={todayString()} value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
-          </div>
-          <div>
-            <label className={label}>Note (cash / UPI…)</label>
-            <input className={input} value={note} onChange={(e) => setNote(e.target.value)} />
-          </div>
-          <div className="flex items-end">
-            <button className={button} disabled={busy}>{busy ? "Saving…" : "Record payment"}</button>
-          </div>
-        </form>
-        {payError && <p role="alert" className={errorText}>{payError}</p>}
-        {payNotice && <p role="status" className="mt-2 text-sm text-emerald-700">{payNotice}</p>}
-        {pays.length > 0 && (
-          <ul className="mt-4 divide-y text-sm">
-            {pays.map((p) => (
-              <li key={p.id} className="flex justify-between py-1.5">
-                <span>{p.paid_on}{p.note ? ` · ${p.note}` : ""}</span>
-                <span>{rupees(Number(p.amount))}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
 
-      <div className={card}>
-        <h2 className="mb-2 font-medium">Attendance</h2>
-        {att.length === 0 ? (
-          <p className="text-sm text-slate-500">No attendance recorded yet.</p>
-        ) : (
-          <>
-            <p className="mb-2 text-sm text-slate-600">
-              Present {present} of {att.length} recorded sessions.
-            </p>
-            <ul className="divide-y text-sm">
-              {att.map((a) => (
-                <li key={a.id} className="flex justify-between py-1.5">
-                  <span>{a.date}</span>
-                  <span className={a.status === "present" ? "text-emerald-700" : "text-red-600"}>{a.status}</span>
-                </li>
+        <div className="space-y-6">
+          <Card title="Student details">
+            <dl className="space-y-3 text-sm">
+              {[
+                ["Batch", student.batches?.name ?? "—"],
+                ["Coach", student.coach],
+                ["Parent", student.parent_name || "—"],
+                ["Parent phone", student.parent_phone],
+                ["Monthly fee", rupees(fee)],
+                ["Joined", student.joined_on],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-4">
+                  <dt className="text-slate-600">{k}</dt>
+                  <dd className="text-right font-medium text-slate-900">{v}</dd>
+                </div>
               ))}
-            </ul>
-          </>
-        )}
+            </dl>
+          </Card>
+
+          <Card flush title="Attendance history">
+            {att.length === 0 ? (
+              <EmptyState icon="calendarCheck" title="No attendance recorded yet">
+                Mark attendance from the Attendance page.
+              </EmptyState>
+            ) : (
+              <>
+                <p className="border-b border-slate-100 px-5 py-3 text-sm text-slate-600">
+                  Present {present} of {att.length} recorded sessions.
+                </p>
+                <ul className="max-h-80 divide-y divide-slate-100 overflow-y-auto text-sm">
+                  {att.map((a) => (
+                    <li key={a.id} className="flex items-center justify-between px-5 py-2.5">
+                      <span className="tabular-nums text-slate-700">{a.date}</span>
+                      <span className={`inline-flex items-center gap-1.5 font-medium capitalize ${a.status === "present" ? "text-emerald-800" : "text-red-800"}`}>
+                        <Icon name={a.status === "present" ? "checkCircle" : "xCircle"} className="h-4 w-4" />
+                        {a.status}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </Card>
+        </div>
       </div>
     </div>
   );

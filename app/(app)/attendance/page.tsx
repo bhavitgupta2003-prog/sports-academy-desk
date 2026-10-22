@@ -4,7 +4,15 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import AddBatch from "@/components/AddBatch";
 import ErrorBox from "@/components/ErrorBox";
-import { card, errorText, input, label } from "@/lib/ui";
+import { input } from "@/lib/ui";
+import Avatar from "@/components/ui/Avatar";
+import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
+import Field from "@/components/ui/Field";
+import Icon from "@/components/ui/Icon";
+import LoadingState from "@/components/ui/LoadingState";
+import Notice from "@/components/ui/Notice";
+import PageHeader from "@/components/ui/PageHeader";
 import { isValidDate, todayString } from "@/lib/fees";
 import { validateRecordDate } from "@/lib/validation";
 import { useSessionGuard } from "@/lib/useSessionGuard";
@@ -132,90 +140,119 @@ export default function AttendancePage() {
     loadStudents();
   };
 
+  const batchName = batches?.find((b) => b.id === batchId)?.name;
+  const markedCount = students ? students.filter((s) => marks[s.id]).length : 0;
+
   return (
-    <div className="max-w-2xl">
-      <h1 className="mb-4 text-xl font-semibold">Attendance</h1>
+    <div className="max-w-3xl">
+      <PageHeader title="Attendance" description="Choose a batch and a date, then mark each student present or absent. Each tap saves straight away." />
+
       {error && <ErrorBox message={error} onRetry={retry} />}
-      {!error && batches === null && (
-        <p role="status" className="text-sm text-slate-500">
-          Loading batches…
-        </p>
-      )}
+      {!error && batches === null && <LoadingState label="Loading batches…" />}
+
       {batches && batches.length === 0 && (
-        <div className={card + " mb-4"}>
-          <p className="mb-2 text-sm">You have no batches yet. Add one to begin:</p>
+        <Card title="Add your first batch" description="Attendance is marked batch by batch, so start by creating one.">
           <AddBatch onAdded={(id) => loadBatches(id)} />
-        </div>
+        </Card>
       )}
+
       {batches && batches.length > 0 && (
-        <div className="mb-4 grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className={label} htmlFor="batch">Batch</label>
-            <select id="batch" className={input} value={batchId} onChange={(e) => setBatchId(e.target.value)}>
-              <option value="">Select a batch…</option>
-              {batches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={label} htmlFor="date">Date</label>
-            <input
-              id="date"
-              className={input}
-              type="date"
-              max={todayString()}
-              value={date}
-              aria-invalid={!!dateError}
-              onChange={(e) => setDate(e.target.value)}
-            />
-            {dateError && <p role="alert" className={errorText}>{dateError}</p>}
-          </div>
-        </div>
-      )}
-
-      {saveError && <p role="alert" className="mb-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{saveError}</p>}
-      {notice && <p role="status" className="mb-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
-
-      {loadingStudents && (
-        <p role="status" className="text-sm text-slate-500">
-          Loading students and attendance…
-        </p>
-      )}
-      {!loadingStudents && batchId && !dateError && students && students.length === 0 && (
-        <p className="text-sm text-slate-600">No students in this batch yet. Add them from the Students page.</p>
-      )}
-      {!loadingStudents && students && students.length > 0 && (
-        <ul className={card + " divide-y p-0"}>
-          {students.map((s) => (
-            <li key={s.id} className="flex items-center justify-between gap-2 px-4 py-3">
-              <Link
-                href={`/students/${s.id}?from=attendance&batch=${batchId}&date=${date}`}
-                className="text-sm font-medium text-emerald-700 underline"
-              >
-                {s.name}
-              </Link>
-              <span className="flex items-center gap-2">
-                {saving[s.id] && <span role="status" className="text-xs text-slate-500">Saving…</span>}
-                {(["present", "absent"] as const).map((st) => (
-                  <button
-                    key={st}
-                    onClick={() => mark(s, st)}
-                    disabled={!!saving[s.id]}
-                    aria-pressed={marks[s.id] === st}
-                    className={`rounded-md border px-3 py-1.5 text-sm capitalize disabled:opacity-50 ${
-                      marks[s.id] === st
-                        ? st === "present" ? "border-emerald-600 bg-emerald-600 text-white" : "border-red-600 bg-red-600 text-white"
-                        : "border-slate-300 bg-white hover:bg-slate-100"
-                    }`}
-                  >
-                    {st}
-                  </button>
+        <Card className="mb-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Batch" htmlFor="batch">
+              <select id="batch" className={input} value={batchId} onChange={(e) => setBatchId(e.target.value)}>
+                <option value="">Select a batch…</option>
+                {batches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
-              </span>
-            </li>
-          ))}
-        </ul>
+              </select>
+            </Field>
+            <Field label="Date" htmlFor="date" error={dateError ?? undefined}>
+              <input
+                id="date"
+                className={input}
+                type="date"
+                max={todayString()}
+                value={date}
+                aria-invalid={!!dateError}
+                aria-describedby={dateError ? "date-error" : undefined}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </Field>
+          </div>
+        </Card>
+      )}
+
+      {saveError && <Notice tone="error" className="mb-4">{saveError}</Notice>}
+      {notice && <Notice tone="success" className="mb-4">{notice}</Notice>}
+
+      {batches && batches.length > 0 && !batchId && !dateError && (
+        <Card>
+          <EmptyState icon="calendarCheck" title="Select a batch to begin">
+            Pick a batch above and its students will appear here.
+          </EmptyState>
+        </Card>
+      )}
+
+      {loadingStudents && <LoadingState label="Loading students and attendance…" />}
+
+      {!loadingStudents && batchId && !dateError && students && students.length === 0 && (
+        <Card>
+          <EmptyState
+            icon="users"
+            title="No students in this batch yet"
+            action={
+              <Link href="/students/new" className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-hover">
+                <Icon name="plus" className="h-4 w-4" />
+                Add a student
+              </Link>
+            }
+          >
+            Add students from the Students page, then come back to mark attendance.
+          </EmptyState>
+        </Card>
+      )}
+
+      {!loadingStudents && students && students.length > 0 && (
+        <Card flush title={batchName} description={`${markedCount} of ${students.length} marked for ${date}`}>
+          <ul className="divide-y divide-slate-100">
+            {students.map((s) => (
+              <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                <Link
+                  href={`/students/${s.id}?from=attendance&batch=${batchId}&date=${date}`}
+                  className="flex min-w-0 items-center gap-3 rounded-md"
+                >
+                  <Avatar name={s.name} />
+                  <span className="truncate font-medium text-slate-900 hover:text-emerald-800 hover:underline">{s.name}</span>
+                </Link>
+                <span className="flex items-center gap-2">
+                  {saving[s.id] && <span role="status" className="text-xs text-slate-600">Saving…</span>}
+                  {(["present", "absent"] as const).map((st) => {
+                    const on = marks[s.id] === st;
+                    return (
+                      <button
+                        key={st}
+                        onClick={() => mark(s, st)}
+                        disabled={!!saving[s.id]}
+                        aria-pressed={on}
+                        className={`inline-flex min-h-10 min-w-28 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium capitalize shadow-sm disabled:opacity-60 ${
+                          on
+                            ? st === "present"
+                              ? "border-emerald-700 bg-emerald-700 text-white"
+                              : "border-red-700 bg-red-700 text-white"
+                            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <Icon name={st === "present" ? "checkCircle" : "xCircle"} className="h-4 w-4" />
+                        {st}
+                      </button>
+                    );
+                  })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
     </div>
   );

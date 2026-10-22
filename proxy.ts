@@ -39,7 +39,7 @@ export async function proxy(request: NextRequest) {
     if (hadSession) url.searchParams.set("reason", "expired");
     return NextResponse.redirect(url);
   }
-  if (loggedIn && onLogin) return NextResponse.redirect(new URL("/students", request.url));
+  if (loggedIn && onLogin) return NextResponse.redirect(new URL("/dashboard", request.url));
   return response;
 }
 

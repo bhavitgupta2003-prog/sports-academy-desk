@@ -3,6 +3,8 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { button, input } from "@/lib/ui";
 import { useSessionGuard } from "@/lib/useSessionGuard";
+import Notice from "@/components/ui/Notice";
+import { ButtonSpinner } from "@/components/ui/LoadingState";
 
 // Small inline form to create a batch (e.g. "Under-12 Cricket, Mon/Wed 5pm").
 export default function AddBatch({ onAdded }: { onAdded: (id: string) => void }) {
@@ -31,14 +33,18 @@ export default function AddBatch({ onAdded }: { onAdded: (id: string) => void })
 
   return (
     <div>
-      <div className="flex gap-2">
-        <input className={input} placeholder="New batch name, e.g. Batch A" value={name} onChange={(e) => setName(e.target.value)} />
-        <button type="button" className={button} onClick={add} disabled={busy}>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <label htmlFor="new-batch" className="sr-only">
+          New batch name
+        </label>
+        <input id="new-batch" className={input} placeholder="New batch name, e.g. Batch A" value={name} onChange={(e) => setName(e.target.value)} />
+        <button type="button" className={button + " shrink-0"} onClick={add} disabled={busy}>
+          {busy && <ButtonSpinner />}
           {busy ? "Adding…" : "Add batch"}
         </button>
       </div>
-      {error && <p role="alert" className="mt-1 text-sm text-red-600">{error}</p>}
-      {done && <p role="status" className="mt-1 text-sm text-emerald-700">{done}</p>}
+      {error && <Notice tone="error" className="mt-3">{error}</Notice>}
+      {done && <Notice tone="success" className="mt-3">{done}</Notice>}
     </div>
   );
 }

@@ -1,12 +1,19 @@
+import Notice from "@/components/ui/Notice";
+
+// Shown when something could not be loaded. The optional Retry button runs the load again.
 export default function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-      <p>{message}</p>
-      {onRetry && (
-        <button onClick={onRetry} className="mt-2 font-medium underline">
-          Retry
-        </button>
-      )}
-    </div>
+    <Notice
+      tone="error"
+      action={
+        onRetry && (
+          <button onClick={onRetry} className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-50">
+            Retry
+          </button>
+        )
+      }
+    >
+      {message}
+    </Notice>
   );
 }

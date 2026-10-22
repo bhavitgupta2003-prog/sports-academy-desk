@@ -4,7 +4,14 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import ErrorBox from "@/components/ErrorBox";
 import FeeStatusBadge from "@/components/FeeStatusBadge";
-import { button, buttonLight, card, input, label } from "@/lib/ui";
+import { button, buttonLight, cardFlush, input, label, td, th } from "@/lib/ui";
+import Avatar from "@/components/ui/Avatar";
+import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
+import Icon from "@/components/ui/Icon";
+import LoadingState from "@/components/ui/LoadingState";
+import Notice from "@/components/ui/Notice";
+import PageHeader from "@/components/ui/PageHeader";
 import { rupees, todayString } from "@/lib/fees";
 import { useSessionGuard } from "@/lib/useSessionGuard";
 import { buildRows, filterRows, noFilters, type Filters, type ListRow, type PaymentRow, type StudentRow } from "@/lib/studentList";
@@ -54,51 +61,53 @@ export default function StudentsPage() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Students</h1>
-        <Link href="/students/new" className={button}>
-          Add student
-        </Link>
-      </div>
+      <PageHeader
+        title="Students"
+        description="Everyone enrolled, with fees and fee status. Search or filter to find someone quickly."
+        actions={
+          <Link href="/students/new" className={button}>
+            <Icon name="plus" className="h-4 w-4" />
+            Add student
+          </Link>
+        }
+      />
 
-      {notice && (
-        <p role="status" className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-          {notice}
-        </p>
-      )}
+      {notice && <Notice tone="success" className="mb-4">{notice}</Notice>}
       {error && <ErrorBox message={error} onRetry={load} />}
-      {!error && rows === null && (
-        <p role="status" className="text-sm text-slate-500">
-          Loading students…
-        </p>
-      )}
+      {!error && rows === null && <LoadingState label="Loading students…" />}
 
       {rows && rows.length === 0 && (
-        <div className={card}>
-          <p className="font-medium">No students yet. Get started in 3 steps:</p>
-          <ol className="mt-2 list-decimal pl-5 text-sm text-slate-600">
-            <li>Click “Add student” (you can create a batch on that page).</li>
-            <li>Open Attendance and mark who is present.</li>
-            <li>Open a student to record a fee payment.</li>
-          </ol>
-          <Link href="/students/new" className={button + " mt-4 inline-block"}>
-            Add your first student
-          </Link>
-        </div>
+        <Card>
+          <EmptyState
+            icon="users"
+            title="No students yet"
+            action={
+              <Link href="/students/new" className={button}>
+                <Icon name="plus" className="h-4 w-4" />
+                Add your first student
+              </Link>
+            }
+          >
+            Get started in 3 steps: add a student (you can create a batch on that page), mark attendance, then record a fee payment from a student page.
+          </EmptyState>
+        </Card>
       )}
 
       {rows && rows.length > 0 && (
         <>
-          <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <div className="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3">
             <div>
               <label className={label} htmlFor="search">Search by name</label>
-              <input
-                id="search"
-                className={input}
-                placeholder="Type a name…"
-                value={filters.search}
-                onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-              />
+              <div className="relative">
+                <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="search"
+                  className={input + " pl-9"}
+                  placeholder="Type a name…"
+                  value={filters.search}
+                  onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+                />
+              </div>
             </div>
             <div>
               <label className={label} htmlFor="batch">Batch</label>
@@ -130,49 +139,59 @@ export default function StudentsPage() {
           </p>
 
           {shown.length === 0 ? (
-            <div className={card}>
-              <p className="font-medium">No students match the selected filters.</p>
-              <p className="mt-1 text-sm text-slate-600">Try a different name, batch or fee status.</p>
-              {filtering && (
-                <button className={buttonLight + " mt-3"} onClick={() => setFilters(noFilters)}>
-                  Clear filters
-                </button>
-              )}
-            </div>
+            <Card>
+              <EmptyState
+                icon="search"
+                title="No students match the selected filters"
+                action={
+                  filtering && (
+                    <button className={buttonLight} onClick={() => setFilters(noFilters)}>
+                      Clear filters
+                    </button>
+                  )
+                }
+              >
+                Try a different name, batch or fee status.
+              </EmptyState>
+            </Card>
           ) : (
-            <div className={card + " overflow-x-auto p-0"}>
-              <table className="w-full text-left text-sm">
-                <thead className="border-b bg-slate-50 text-slate-600">
-                  <tr>
-                    <th className="px-4 py-2">Name</th>
-                    <th className="px-4 py-2">Batch</th>
-                    <th className="px-4 py-2">Coach</th>
-                    <th className="px-4 py-2">Monthly fee</th>
-                    <th className="px-4 py-2">Outstanding</th>
-                    <th className="px-4 py-2">Fee status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {shown.map((r) => (
-                    <tr key={r.id} className="border-b last:border-0 hover:bg-slate-50">
-                      <td className="px-4 py-2">
-                        <Link href={`/students/${r.id}`} className="font-medium text-emerald-700 underline">
-                          {r.name}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2">{r.batchName}</td>
-                      <td className="px-4 py-2">{r.coach}</td>
-                      <td className="px-4 py-2">{rupees(r.monthly_fee)}</td>
-                      <td className="px-4 py-2 font-medium">
-                        {r.owed < 0 ? `${rupees(-r.owed)} ahead` : rupees(r.owed)}
-                      </td>
-                      <td className="px-4 py-2">
-                        <FeeStatusBadge status={r.status} />
-                      </td>
+            <div className={cardFlush}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <caption className="sr-only">Students with their fees and fee status</caption>
+                  <thead className="border-b border-slate-200 bg-slate-50">
+                    <tr>
+                      <th scope="col" className={th}>Student</th>
+                      <th scope="col" className={th}>Batch</th>
+                      <th scope="col" className={th}>Coach</th>
+                      <th scope="col" className={th + " text-right"}>Monthly fee</th>
+                      <th scope="col" className={th + " text-right"}>Outstanding</th>
+                      <th scope="col" className={th}>Fee status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {shown.map((r) => (
+                      <tr key={r.id} className="hover:bg-slate-50">
+                        <td className={td}>
+                          <Link href={`/students/${r.id}`} className="flex items-center gap-3 rounded-md">
+                            <Avatar name={r.name} />
+                            <span className="font-medium text-slate-900 hover:text-emerald-800 hover:underline">{r.name}</span>
+                          </Link>
+                        </td>
+                        <td className={td + " text-slate-700"}>{r.batchName}</td>
+                        <td className={td + " text-slate-700"}>{r.coach}</td>
+                        <td className={td + " text-right tabular-nums text-slate-700"}>{rupees(r.monthly_fee)}</td>
+                        <td className={td + " text-right font-medium tabular-nums text-slate-900"}>
+                          {r.owed < 0 ? `${rupees(-r.owed)} ahead` : rupees(r.owed)}
+                        </td>
+                        <td className={td}>
+                          <FeeStatusBadge status={r.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </>

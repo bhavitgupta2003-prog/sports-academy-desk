@@ -1,10 +1,17 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import AddBatch from "@/components/AddBatch";
 import ErrorBox from "@/components/ErrorBox";
-import { button, buttonLight, card, errorText, input, label } from "@/lib/ui";
+import { button, buttonLight, input } from "@/lib/ui";
+import Card from "@/components/ui/Card";
+import Field from "@/components/ui/Field";
+import Icon from "@/components/ui/Icon";
+import { ButtonSpinner } from "@/components/ui/LoadingState";
+import Notice from "@/components/ui/Notice";
+import PageHeader from "@/components/ui/PageHeader";
 import { isValidDate, todayString } from "@/lib/fees";
 import { findDuplicates } from "@/lib/validation";
 import { useSessionGuard } from "@/lib/useSessionGuard";
@@ -100,56 +107,85 @@ export default function NewStudentPage() {
     router.push("/students?added=1");
   }
 
-  if (loadError) return <ErrorBox message={loadError} onRetry={() => loadBatches()} />;
+  const back = (
+    <Link href="/students" className="inline-flex items-center gap-1.5 font-medium text-emerald-800 hover:underline">
+      <Icon name="arrowLeft" className="h-4 w-4" />
+      All students
+    </Link>
+  );
+
+  if (loadError) {
+    return (
+      <div>
+        <PageHeader title="Add student" back={back} />
+        <ErrorBox message={loadError} onRetry={() => loadBatches()} />
+      </div>
+    );
+  }
+
+  // Props shared by inputs: a link to their error message and the red "invalid" look.
+  const a11y = (k: string) => ({ "aria-invalid": !!errors[k], "aria-describedby": errors[k] ? `${k}-error` : undefined });
 
   return (
-    <div className="max-w-lg">
-      <h1 className="mb-4 text-xl font-semibold">Add student</h1>
-      <form onSubmit={save} className={card + " space-y-4"}>
-        <div>
-          <label className={label}>Student name</label>
-          <input className={input} value={f.name} onChange={set("name")} />
-          {errors.name && <p className={errorText}>{errors.name}</p>}
-        </div>
-        <div>
-          <label className={label}>Batch</label>
-          <select className={input} value={f.batch_id} onChange={set("batch_id")}>
-            <option value="">Select a batch…</option>
-            {batches?.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-          {errors.batch_id && <p className={errorText}>{errors.batch_id}</p>}
-        </div>
-        <div>
-          <label className={label}>Coach</label>
-          <input className={input} value={f.coach} onChange={set("coach")} />
-          {errors.coach && <p className={errorText}>{errors.coach}</p>}
-        </div>
-        <div>
-          <label className={label}>Parent name (optional)</label>
-          <input className={input} value={f.parent_name} onChange={set("parent_name")} />
-        </div>
-        <div>
-          <label className={label}>Parent phone</label>
-          <input className={input} value={f.parent_phone} onChange={set("parent_phone")} />
-          {errors.parent_phone && <p className={errorText}>{errors.parent_phone}</p>}
-        </div>
-        <div>
-          <label className={label}>Monthly fee (Rs)</label>
-          <input className={input} inputMode="decimal" value={f.monthly_fee} onChange={set("monthly_fee")} />
-          {errors.monthly_fee && <p className={errorText}>{errors.monthly_fee}</p>}
-        </div>
-        <div>
-          <label className={label}>Joined on</label>
-          <input className={input} type="date" max={todayString()} value={f.joined_on} onChange={set("joined_on")} />
-          <p className="mt-1 text-xs text-slate-500">Fees are counted from this month. Change it for students who joined earlier.</p>
-          {errors.joined_on && <p className={errorText}>{errors.joined_on}</p>}
-        </div>
+    <div className="max-w-3xl">
+      <PageHeader
+        back={back}
+        title="Add student"
+        description="Fill in the details below. Fees are counted from the month the student joined."
+      />
+      <form onSubmit={save} noValidate className="space-y-6">
+        <Card title="Student">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Field label="Student name" htmlFor="name" error={errors.name}>
+                <input id="name" className={input} value={f.name} onChange={set("name")} autoComplete="off" {...a11y("name")} />
+              </Field>
+            </div>
+            <Field label="Batch" htmlFor="batch_id" error={errors.batch_id} hint="Need a new one? Add it below the form.">
+              <select id="batch_id" className={input} value={f.batch_id} onChange={set("batch_id")} {...a11y("batch_id")}>
+                <option value="">Select a batch…</option>
+                {batches?.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Coach" htmlFor="coach" error={errors.coach}>
+              <input id="coach" className={input} value={f.coach} onChange={set("coach")} {...a11y("coach")} />
+            </Field>
+          </div>
+        </Card>
+
+        <Card title="Parent or guardian">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Parent name (optional)" htmlFor="parent_name">
+              <input id="parent_name" className={input} value={f.parent_name} onChange={set("parent_name")} />
+            </Field>
+            <Field label="Parent phone" htmlFor="parent_phone" error={errors.parent_phone}>
+              <input id="parent_phone" className={input} inputMode="tel" value={f.parent_phone} onChange={set("parent_phone")} {...a11y("parent_phone")} />
+            </Field>
+          </div>
+        </Card>
+
+        <Card title="Fees">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Monthly fee (Rs)" htmlFor="monthly_fee" error={errors.monthly_fee}>
+              <input id="monthly_fee" className={input} inputMode="decimal" value={f.monthly_fee} onChange={set("monthly_fee")} {...a11y("monthly_fee")} />
+            </Field>
+            <Field
+              label="Joined on"
+              htmlFor="joined_on"
+              error={errors.joined_on}
+              hint="Fees are counted from this month. Change it for students who joined earlier."
+            >
+              <input id="joined_on" className={input} type="date" max={todayString()} value={f.joined_on} onChange={set("joined_on")} {...a11y("joined_on")} />
+            </Field>
+          </div>
+        </Card>
+
         {duplicates && (
-          <div role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <Notice tone="warning">
             <p className="font-medium">
               {duplicates.length === 1 ? "A student with this name already exists:" : `${duplicates.length} students with this name already exist:`}
             </p>
@@ -162,26 +198,36 @@ export default function NewStudentPage() {
               ))}
             </ul>
             <p className="mt-2">Two different students can share a name. If this is a new student, you can save anyway.</p>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" className={button} disabled={busy} onClick={insertStudent}>
+                {busy && <ButtonSpinner />}
                 {busy ? "Saving…" : "Save anyway"}
               </button>
               <button type="button" className={buttonLight} disabled={busy} onClick={() => setDuplicates(null)}>
                 Go back and edit
               </button>
             </div>
+          </Notice>
+        )}
+        {saveError && <Notice tone="error">{saveError}</Notice>}
+
+        {!duplicates && (
+          <div className="flex flex-wrap items-center gap-3">
+            <button className={button} disabled={busy}>
+              {busy && <ButtonSpinner />}
+              {busy ? "Saving…" : "Save student"}
+            </button>
+            <Link href="/students" className={buttonLight}>
+              Cancel
+            </Link>
           </div>
         )}
-        {saveError && <p role="alert" className={errorText}>{saveError}</p>}
-        {!duplicates && (
-          <button className={button} disabled={busy}>
-            {busy ? "Saving…" : "Save student"}
-          </button>
-        )}
       </form>
-      <div className={card + " mt-4"}>
-        <p className="mb-2 text-sm font-medium">Need a new batch?</p>
-        <AddBatch onAdded={(id) => loadBatches(id)} />
+
+      <div className="mt-8">
+        <Card title="Need a new batch?" description="Add it here, and it will be selected for you.">
+          <AddBatch onAdded={(id) => loadBatches(id)} />
+        </Card>
       </div>
     </div>
   );

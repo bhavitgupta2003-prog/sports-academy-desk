@@ -5,6 +5,7 @@ A small web portal for sports academy owners and coaches to keep students, atten
 ## What it does today
 
 - **Staff login** with email and password (Supabase Auth). Each account sees only its own data.
+- **Dashboard:** total students, today's attendance, outstanding fees, a list of students with overdue fees, and quick actions. Every number comes from your own records.
 - **Students:** add a student (name, batch, coach, parent contact, monthly fee, joining date), see them in a list, open their details. Warns when another student has the same name, but still lets you save.
 - **Fees:** the outstanding balance is worked out from the joining month, the monthly fee and the payments recorded. Staff record payments by hand (cash, UPI, etc.). There is no online payment.
 - **Fee status:** every student shows **Paid**, **Due soon** or **Overdue**. Each month's fee is due on the 5th (the joining month: the later of the 5th and the joining day). The list can be searched by name and filtered by batch and fee status.
