@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# keep the empty template committed
+!.env.example
+
+# local preview settings
+.claude/
